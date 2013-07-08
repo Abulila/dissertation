@@ -89,13 +89,12 @@
 \bibliographystyle{agu04}    % Set the bibliography style. agu04, plain, alpha, etc.
 
 % Title page as required by Rackham dissertation guidelines
-\titlepage{The Title of Your Dissertation}{Your Name}{Doctor of Philosophy}
-{Atmospheric and Space Sciences}{2008}
-{Professor Albert Einstein, Chair\\
- Professor Werner Heisenberg\\
- Associate Professor Hermann von Helmholtz\\
- Associate Professor Edwin Hubble\\
- Assistant Professor John von Neumann}
+\titlepage{Thesis Proposal: Database and System Design for Emerging Storage Technologies}{Steven Pelley}{Doctor of Philosophy}
+{Computer Science and Engineering}{2013}
+{Assistant Professor Thomas F. Wenisch, Chair\\
+ Professor Peter M. Chen\\
+ Assistant Professor Michael J. Cafarella\\
+ Assistant Professor Zhengya Zhang}
 
 % Begin the front matter as required by Rackham dissertation guidelines
 \initializefrontsections
@@ -104,20 +103,20 @@
 %\frontispiece{\includegraphics[width=6in]{Intro/Happy} Find a cool picture to go here.}
 
 % Optional, but recommended, Copyright page
-\copyrightpage{Your Name}
+%\copyrightpage{Steven Pelley}
 
 % Page numbering. If you don't include a frontispiece or copyright page, you'll need to change this for two-sided printing.
 \makeatletter
-\if@twoside \setcounter{page}{4} \else \setcounter{page}{1} \fi
+\if@twoside \setcounter{page}{4} \else \setcounter{page}{0} \fi
 \makeatother
  
 % Optional Dedication page
-\dedicationpage{For all the people}
+%\dedicationpage{For all the people}
 
 % Optional Acknowledgements page
-\startacknowledgementspage
-\input{Intro/Acknowledgements}
-\label{Acknowledgements}
+%\startacknowledgementspage
+%\input{Intro/Acknowledgements}
+%\label{Acknowledgements}
 
 % Optional Preface page
 %\startprefacepage
@@ -134,7 +133,7 @@
 
 % Optional in-dissertation Abstract Page
 \startabstractpage
-{The Title of Your Dissertation}{Your Name}{Chair: Albert Einstein}
+{Database and System Design for Emerging Storage Technologies}{Steven Pelley}{Chair: Thomas F. Wenisch}
 \input{Abstract/Abstract}
 \label{Abstract}
 
