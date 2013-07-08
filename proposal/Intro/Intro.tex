@@ -1,3 +1,65 @@
-The weather in space can have substantial effects on everything within the Sun's influence, including Earth. Most of the effects of space weather are mitigated by Earth's atmosphere and magnetic field, which form a barrier that much of the plasma in space cannot penetrate. Spacecraft and astronauts, however, risk exposure to potentially harmful radiation. Space weather can directly affect Earth's atmosphere, such as near Earth's poles where the magnetic field is shaped in such a way that the solar wind can interact with the upper atmosphere and create the aurora. Space weather can be dangerous, as storms from the Sun damage spacecraft and cause power outages on Earth. To protect astronauts and spacecraft from harm, an understanding of the fundamental physics behind space weather is vital. There are many unknown pieces to the puzzle, but through research and experimentation the picture is slowly being pieced together. As mankind looks toward further exploration of the Moon and the planets, the ability to forecast and protect humans from the effects of space weather become even more important.
-%
-%This research examines new techniques and tools that can be used to study crucial pieces of the space weather puzzle. The emphasis is on ions found in the space environment: the solar wind (keV), pickup ions (10--100 keV), and energetic particles (100 keV--GeV). Each of these particle populations is created by a specific set of processes, described briefly in Chapter~\ref{chap:Particles}, and all have trajectories through space that are closely related to the magnetic field of the Sun and the heliosphere. Within the Alfv\'{e}n radius (10--20 R$_\sun$), where the kinetic energy of the solar wind is weaker than the energy density of the Sun's magnetic field, the solar wind is guided by the field's shape and corotates with the Sun. Beyond this radial distance, the electrically charged and highly conductive solar wind controls and shapes the magnetic field, drawing it radially outward into the heliosphere. Energetic particles travel along the lines of magnetic flux that extend from the solar surface to the outermost reaches of the solar system. To a large degree, if the shape and path of the Sun's magnetic field can be accurately mapped, the trajectories of these particles could be inferred. However, such mapping techniques have been elusive, or inaccessible to the broad community.
+For decades disk has been the primary technology and durable and large-capacity storage.
+Although inexpensive and dense, disk provides high performance only for coarse-grained sequential access and suffers enormous slowdowns for random reads and writes.
+Recently, several new technologies have emerged as popular or viable storage alternatives.
+Flash memory, primarily used for mobile storage, has recently gained traction as a high-performance enterprise storage solution.
+More recently, Nonvolatile Random Access Memories (NVRAM), such as phase change memory and spin-transfer torque RAM, have emerged as viable storage alternatives \fixme{cite BurrKurdi08}.
+
+These technologies offer significant performance improvements over disk, while still providing durability with great storage capacity.
+As drop-in replacements for disk, flash and NVRAM accelerate storage access.
+However, this fails to address specific device characteristics and address how new storage technologies differ from disk.
+
+My thesis investigates how several data-centric workloads interact with future storage technologies, the relevant software and algorithms, and in some instances the hardware interface.
+Specifically, we consider both analytics (commonly Decision Support Systems -- DSS -- or ``Big Data") and On-Line Transaction Processing (OLTP), workloads which generally fit until the broad definition of databases.
+Moreover, both workload classes have long been constrained by disk, both in terms of cost and software design complexity.
+I match each workload to the emerging storage technology that suits it best and address specific opportunities or deficiencies in the software and hardware systems.
+
+Analytics relies on disk to provide enormous data capacity.
+Typical analytics work-flow involves taking a snapshot of data from an online database and mining this data from complex, yet useful, patterns.
+While this application does not rely on disk's durability for recovery (in fact, instances that reasonably fit in main memory should do so), modern analytics data sets may reach \fixme{how large and cite} scale, and accessing such large data quickly becomes the dominant bottleneck.
+Such capacity is only reasonably achieved by disk and flash memory.
+
+Decades of research have provided modern analytics databases with tools to minimize storage page accesses, particularly random accesses (e.g., disk-specific indices, join algorithms to minimize page access and produce large sequential runs).
+Whereas these optimizations are still effective for flash, they may fail to fully leverage flash's ability to read randomly located data quickly, or properly account for flash's higher throughput reads than writes.
+As examples, I consider access paths (various scan types) and joins.
+An old rule of thumb for scans is that an index should be used when less than 10\% of tuples in a table are accessed, otherwise the entire table should be scanned.
+The intuition is that locating tuples from an index requires random reads as well as reading additional pages (from the index itself).
+One would expect that this number (10\%) should shift right when replacing disk with flash -- flash is no longer penalized by random reads, so any access path that minimizes total page accesses will be preferred.
+Similarly, different ad hoc join algorithms (those that do not use indices: block-nested loops, sort-merge join, and hybrid-hash join) present different storage access patterns and may be variably suited to disk and flash.
+
+My results, originally presented in ADMS 2010 \fixme{cite}, show that while both previous hypotheses are correct, their significance is negligible.
+Optimal access path (index vs table scan) only changes between disk and flash for a small range of query selectivities, and queries within that range see only a small performance improvement.
+Additionally, join algorithm choice makes little difference, as optimized join algorithms exhibit nearly balanced read and write capacity in large sequential runs -- join optimized for disk is already optimized for flash.
+I conclude that the page-oriented nature of flash, as well as requiring sequential writes to provide high throughput, limits further analytics-flash optimization.
+Next, I turn to NVRAM and possible database uses
+
+While NVRAM may benefit analytics, any approach would closely resemble DRAM-based analytics, a largely solved problem.
+However, NVRAM can also be used to provide failure recovery for durable transactions.
+Databases have been designed for decades to provide high-throughput transaction processing with disk; Write Ahead Logging (WAL) techniques, such as ARIES \fixme{cite}, transform random writes into sequential writes and minimize transactions' dependences on disk accesses.
+With sufficient IOPS and read-buffering databases can be made compute-bound and recover near-instantly.
+NVRAMs provide this storage throughput, which I expect to provide high transaction performance and low recovery latency to the masses.
+
+Whereas ARIES was necessary for disk, it presents only unnecessary software overheads to NVRAM.
+I show that removing ARIES improves transaction throughput due to three effects: (1) threads previously occupied by page and log flushers become available to serve additional transactions, (2) asynchronous page flushing, which interferes with transactions as both flusher and transaction threads latch frequently accessed pages, is removed, and (3) transactions no longer insert WAL log entries, reducing the transaction code path.
+Instead, NVRAM allows data to be updated in-place, enforcing data persistence immediately and providing correct recovery via transaction-local undo logs.
+
+NVRAMs, however, are not without their limitations.
+Se\-veral candidate NVRAM technologies exhibit larger read latency and significantly larger write latency compared to DRAM.
+Additionally, whereas DRAM writes benefit from caching and typically are not on applications' critical paths, NVRAM writes must become persistent in a constrained order to ensure correct recovery.
+We consider an NVRAM access model where correct ordering of persistent writes is enforced via \emph{persist barriers}, which stall until preceding NVRAM writes are complete; such persist barriers can introduce substantial delays when NVRAM writes are slow.
+
+To address these challenges I profile OLTP, accelerating NVRAM reads with various cache architectures and capacities, and mitigating persist barrier delays by introducing a new recovery mechanism, NVRAM Group Commit.
+I show that fast, memory-bus-connected NVRAM needs no additional caching (on-chip caches suffice) and that updating data in-place is the correct recovery strategy.
+However, long latency interconnects (e.g., NUMA, PCIe-attached NVRAM, or distributed storage) require additional caching and benefit from NVRAM Group Commit.
+This work is currently under review at VLDB.
+
+Finally, I propose the final project of my thesis.
+The previous work looks at how OLTP recovery mechanisms should be designed, considering only the average delay endured by persist barriers.
+I intend to consider specific implementations of persist barriers, extending the concept of memory consistency with persistence to introduce \emph{memory persistency}.
+
+Similarly to memory consistency, persistency presents trade offs between hardware complexity, performance, and ease of programming.
+I will explore several existing solutions, why they fall short, and place them into a more precisely defined taxonomy of memory persistency.
+Further, I will introduce important uses of relaxed consistency and how it improves performance.
+Finally, I will highlight new optimizations for persist barriers and memory persistency, additionally providing simple benchmarks and an evaluation.
+
+The following proposal is organized as followed:
+\todo{spell out the organization}
