@@ -26,6 +26,9 @@
 \newcommand{\InPlace}{{\em In-Pl\-ace Up\-dat\-es}\xspace}
 \newcommand{\GroupCommit}{{\em NVRAM Group Com\-mit}\xspace}
 
+\usepackage{textcomp}
+\usepackage{txfonts}
+
 %\doublespacing           % \onehalfspacing for 1.5 spacing, \doublespacing for 2.0 spacing.
 \onehalfspacing
 %\newcommand{\sun}{\ensuremath{\odot}} % sun symbol is \sun
@@ -131,9 +134,9 @@
 % Table of contents, list of figures, etc.
 \tableofcontents     % Required
 \listoffigures       % Required if there is more than one figure
-%\listoftables        % Required if there is more than one table
+\listoftables        % Required if there is more than one table
 %\listofmaps          % Required if there is more than one map
-%\listofappendices    % Required if there is more than one appendix
+\listofappendices    % Required if there is more than one appendix
 \listofabbreviations % Optional. Abbreviations should be stored in a file named abbr.tex
 
 % Optional in-dissertation Abstract Page
@@ -152,6 +155,10 @@
  \chapter{Introduction}
  \label{chap:Intro}
  \input{Intro/Intro}
+
+ \chapter{Background}
+ \label{chap:Background}
+ \input{Background/Background}
 
  \chapter{Particle Transport and Acceleration}
  \label{chap:Particles}
