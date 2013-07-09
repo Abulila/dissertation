@@ -1,0 +1,192 @@
+This chapter provides details necessary to understand the investigations and experiments in this thesis.
+I focus on storage technologies, database analytics optimization, and database transaction processing optimizations.
+The purpose of discussing database optimizations is to understand the complications that arise when using disk for large capacity or durability, and how this will interact with emerging storage technologies.
+
+\section{Storage Technologies}
+\label{sec:Background:Storage}
+
+I start with a survey of storage technologies including disk, flash, and upcoming NVRAM.
+For each, I provide the operating principles and interesting technological trends.
+
+\begin{table}
+  \centering
+  \begin{tabular}{ l  l  l }
+  %\begin{tabular}{r@{\hspace{12pt}}c@{\hspace{12pt}}c@{\hspace{12pt}}}
+  \hline
+   & Disk & Flash \\
+  \hline
+   Model & WD VelociRaptor 10Krpm & OCZ RevoDrive \\
+   Capacity & 300gb & 120gb \\
+   Price & \$164 & \$300 \\
+   Random Read & 10ms & 90$\muup$s \\
+   Seq. Read & 120mb/s & 190mb/s \\
+  \hline
+  \end{tabular}
+
+  \caption{Disk Characteristics}
+  \label{table:DiskCharacteristics}
+\end{table}
+
+\subsection{Disk}
+\label{sec:Background:Storage:Disk}
+\todo{find some citation for disk.  System R?  Also citation for operating principles}
+I provide a summary of disk here only for comparison and to be thorough.
+Disk has been the primary durable and high capacity storage technology for decades.
+Disks function by storing data on spinning magnetic platters.
+Accessing data requires moving the \emph{hard disk head} onto the proper \emph{track}.
+Once the head settles, it may read or write data once the platter rotates and the correct sector within the track reaches the head.
+Disk capacity increases with the areal size and number of platters, as well as areal density (placing more sectors and tracks within the same area).
+Because capacity has scaled so well (and continues to), disk remains an important technology for large datasets and persistent storage.
+
+While dominant, disk exhibits relatively slow access and undesirable access behavior.
+Rotational speed limits the rate that data transfers to or from the disk.
+Further, random reads and writes must first seek to the proper track and then wait until the sector of interest reaches the head, a process which takes several ms.
+Table~\ref{table:DiskCharacteristics} lists the measured performance characteristics of an enterprise disk.
+My disk achieves nearly 120 MB/s sequential transfers, but random reads take an average of 10ms (only 50 KB/s for 512 byte sectors!).
+As a result, there is a large history of optimization for disk-resident storage, as I discuss later in the chapter.
+
+\subsection{Flash Memory}
+\label{sec:Background:Flash}
+Driven by the popularity of mobile devices, Flash memory has quickly improved in both storage density and cost to the point where it has become a viable alternative for durable storage even in enterprise-class systems.
+Unlike conventional rotating hard disks, which store data using magnetic materials, Flash stores charge on a floating-gate transistor, forming a memory cell.
+These transistors are arranged in arrays resembling NAND logic gates, after which the ``NAND Flash'' technology is named.
+This layout gives NAND Flash a high storage density relative to other memory technologies.
+Though dense, the layout sacrifices byte addressability and some read latency---an entire array (a.k.a. page, typically 2KB to 4KB) must be read in a single operation---making NAND Flash more appropriate for block-oriented IO than as a direct replacement for RAM.  
+
+One of the difficulties of Flash devices is that a cell can be more easily programmed (by adding electrons to the floating gate) than erased (removing these electrons).  
+Erase operations require both greater energy and latency, and typically can be applied only at coarse granularity (e.g., over blocks of 128KB to 512KB).
+Moreover, repeated erase operations cause the Flash cell to wear out over time, limiting the maximum lifetime of the cell (e.g., to $10^5$ to $10^6$ writes \fixme{Roberts2009}).  
+Recent Flash devices further increase storage density by using several distinct charge values to represent multiple bits in a single cell at the cost of slower accesses and even shorter lifetimes.
+
+A Flash-based SSD wraps an array of underlying Flash memory chips with a controller that manages capacity allocation, mapping, and wear leveling across the individual Flash devices.  
+The controller mimics the interface of a conventional (e.g., SATA) hard drive, allowing Flash SSDs to be drop-in replacements for conventional disks.
+      
+As previously noted, Flash SSDs provide substantially better performance than disks, particularly for random reads, but at higher cost.
+Table \ref{table:DiskCharacteristics} lists specifications of a typical Flash SSD as compared to a 10,000 RPM hard drive.
+Though neither of these devices are the highest-performing available today, they are representative of the mid-range of their respective markets.
+The latency for a random read is over 100\texttimes~better on the SSD than on the disk, while the sequential read bandwidth is 1.6\texttimes~better. 
+Unlike disks, where each random read incurs mechanical delays (disk head seek and rotational delays), on SSDs, a random read is nearly as fast as a sequential read.  
+
+\subsection{NVRAM}
+\label{sec:Background:NVRAM}
+
+Nonvolatile memories will soon be commonplace.
+Technology trends suggest that DRAM and flash memory may cease to scale, requiring new dense memory technologies \cite{LeeIpek09}.
+
+\textbf{Memory technology characteristics.}
+Numerous technologies offer durable byte-addressable access.
+Examples include phase change memory (PCM), where a chalcogenide glass is heated to produce varying electrical conductivities, and spin-transfer torque memory (STT-RAM), a magnetic memory that stores state in electron spin \cite{BurrKurdi08}.
+Storage capacity increases by storing more than two states per cell in Multi-level Cells (MLC) (e.g., four distinct resistivity levels provide storage of 2 bits per cell).
+
+While it remains unclear which of these technologies will eventually dominate, many share common characteristics.
+In particular, NVRAMs will likely provide somewhat higher access latency relative to DRAM.
+Furthermore, several technologies are expected to have asymmetric read-write latencies, where writing to the device may take several microseconds \cite{QureshiSrinivasan09}, although substantial faster than disk or flash.
+Write latency worsens with MLC, where slow, iterative writes are necessary to reliably write to a cell.
+
+Similarly to flash, resistive NVRAM technologies suffer from limited write endurance; cells may be written reliably only a limited number of times.
+Previously proposed hardware mechanisms (e.g., Start-Gap \cite{QureshiKaridis09}) are highly effective in distributing writes across cells and can mitigate write endurance concerns.
+While such work focuses on volatile applications (NVRAM as a DRAM main memory substitute), it may be extended to durable uses.
+
+\textbf{NVRAM storage architectures.}
+Future database systems may incorporate NVRAM in a variety of ways.
+At one extreme, NVRAM can be deployed as a disk or flash SSD replacement.
+While safe, cost-effective, and backwards compatible, the traditional disk interface imposes overheads.
+Prior work demonstrates that file system and disk controller latencies dominate NVRAM access times \cite{CaulfieldDe10}.
+Furthermore, block access negates advantages of byte addressability.
+
+Recent research proposes alternative device interfaces for NVRAM.
+Caulfield \emph{et al.} propose Moneta and Moneta Direct, a PCIe attached PCM device \cite{CaulfieldMollov12}.
+Unlike disk, Moneta Direct bypasses expensive system software and disk controller hardware to minimize access latency while still providing traditional file system semantics.
+However, Moneta retains a block interface.
+Condit \emph{et al.} suggest that NVRAM connect directly to the memory bus, with additional hardware and software mechanisms providing file system access and consistency \cite{ConditNightingale09}.
+I later adopt the same atomic eight-byte persistent write, enabling small, safe writes even in the face of failure.
+NVRAM will eventually connect via a memory interface, but it is unclear how NVRAM storage will evolve or what its exact performance characteristics will be.
+
+\section{Analytics Optimization}
+\label{sec:Background:Analytics}
+
+Large scale data processing requires efficient use of storage devices.
+I discuss two important operators within the relational model most affected by flash's performance characteristics: scans and joins.
+
+\subsection{Scans}
+\label{sec:Background:Scans}
+
+Whenever a query accesses a table, the query optimizer must choose an access path for that table. 
+The goal is to select all relevant rows from the table while touching the least number of storage pages, frequently with the use of indexes.
+Work on access path selection dates back to the late 1970s \cite{Selinger1979}.
+There are two classic scan operators implemented by nearly all commercial DBMS systems: \emph{relation scan} and \emph{index scan}.
+An index is a database data structure that maps values within a row back to that row.
+Additionally, indexes may be ordered (as in an in-memory balanced tree or disk-resident B-Tree) to efficiently retrieve all rows satisfying a range query (e.g., an ordered index on ``last name" would accelerate a query asking for all people whose last name is between ``Pelley" and ``Wenisch").
+Many types of indexes exist, but all that must be considered here is that they provide a more direct way to filter specific data than scanning an entire data set.
+
+When no indexes are available, the only choice is to perform a \emph{relation scan}, where all data pages in the table are read from disk and scanned tuple-by-tuple to select relevant tuples.
+When a relevant index is available, the DBMS may instead choose to perform an \emph{index scan}, where the execution engine traverses the relevant portion of the index and fetches only pages containing selected tuples as needed.
+
+For clustered indexes (i.e., the row itself exists within the index, and all rows are sorted according to the index key), an index scan is nearly always the preferred access path, regardless of the underlying storage device.  
+For non-clustered indexes, whether the optimizer should choose a relation scan or index scan depends on the selectivity of the query; relation scans have roughly constant cost regardless of selectivity, whereas index scan costs grow approximately linearly with selectivity.
+When selectivity is low, the index scan provides greater performance because it minimizes the total amount of data that must be transferred from disk.
+However, as selectivity increases, the fixed-cost relation scan becomes faster.  
+Though the relation scan reads the entire table, it can do so using sequential rather than random IO, leveraging the better sequential IO performance of rotating hard disks.
+A classic rule of thumb for access path selection is to choose a relation scan once selectivity exceeds ten percent \cite{RamakrishnanAndGehrke}.
+
+Recent databases implement a third, hybrid scan operator, which we call \emph{rowid-sort scan}.
+In this scan operator, the unclustered index is scanned to identify relevant tuples.
+However, rather than immediately fetching the underlying data pages, the rowid of each tuple is stored in a temporary table, which is then sorted at the end of the index scan.
+Then, the pages identified in the temporary table are fetched in order, and relevant tuples are returned from the page.
+The rowid-sort scan has the advantage that each data page will be fetched from disk only once, even if multiple relevant tuples are located on the page. 
+This operation exists under several names.
+My description here fits the query plan explanation provided by IBM's DB2.
+Other databases use different terminology or algorithms to ensure that each store page is fetched exactly once (for example, PostgreSQL uses a bitmap index, sorting the list of pages with tuples that satisfy the query \fixme{cite Postgres?}).
+Rowid-sort scan is the optimal access path for intermediate selectivities.
+
+\subsection{Joins}
+\label{sec:Background:Joins}
+
+One of the most important decisions a query optimizer must make is to choose an appropriate join algorithm for a given query.
+The development of join algorithms and optimization strategies dates back over 30 years \cite{Selinger1979,Shapiro1986}. 
+Most commercial DBMS systems implement variants of at least three join algorithms: nested-loop join, sort-merge join, and hybrid hash join.
+At a high level, the nested-loop join iterates over the inner relation for each tuple of the outer relation; the sort-merge join sorts both relations and then performs concurrent scans of the sorted results; and the hybrid hash join forms in-memory hash tables of partitions of the inner relation and then probes these with tuples from the outer relation.
+
+The relative performance of these algorithms depends on a complex interplay of memory capacity, relation sizes, and the relative costs of random and sequential IOs.  
+One example performance model that captures this interplay was proposed by Haas and co-authors \cite{DBLP:journals/vldb/HaasCLS97}.
+Their model estimates the number disk seeks and the size of each data transfer and weights each by a cost based on assumed characteristics of the IO device.
+The model further identifies the optimal buffering strategy for the various phases of each join algorithm.
+Seek and random/sequential transfer times are central parameters of this model, suggesting that new technologies require new device-specific query optimiziation.
+
+As accessing large amounts of data on disk can take long periods of time, it is imperative that the query optimizer choose the best query plan.
+Typical query optimizers use data statistics to approximate query selectivity and cardinality as well as physically-based models to estimate the runtime of candidate query plans.
+Section~\fixme{section} will investigate when the query plan changes between disk and flash, and what performance is lost when the incorrect decision is made (i.e., when optimizing for disk but actually using flash).
+
+\section{Durable and Recoverable Transactions}
+\label{sec:Background:Recovery}
+
+Many database applications require transaction semantics commonly described as ACID (Atomic, Consistent, Isolated, Durable).
+While the first of these three are controlled by the databases concurrency control mechanisms mostly within the databases main memory, transaction durability and database recovery interacts with persistent storage.
+The goal of recovery management is to ensure that during normal transaction processing no transaction reports that it has commit and is later lost after a system failure, and that any transaction that fails to commit before a failure is completely removed (i.e., no partial updates remain).
+Additionally, recovery should occur as quickly as possible and allow efficient forward processing.
+Many different schemes provide correct, high performance recovery for disk.
+I describe ARIES \cite{MohanHaderle92}, a popular Write Ahead Logging (WAL) system that provides atomic durable transactions.
+
+\textbf{ARIES.}
+ARIES uses a two-level store (disk and volatile buffer cache) alongside a centralized log.
+The buffer cache is necessary to accelerate reads and defer writes that would otherwise access the disk.
+Transaction writes coalesce in the buffer cache while persisting to the log as ordered entries that describe store page updates, transforming random writes into sequential writes.
+
+The log improves disk write performance while and simultaneously provides data recovery after failure.
+Transaction updates produce both redo and undo entries.
+Redo logs record actions performed on store pages so that they can be replayed if data has not yet persisted in-place.
+Undo logs provide roll back operations necessary to remove aborted and uncommitted transaction updates during recovery.
+The database occasionally places a checkpoint in the long, marking the oldest update within the database still volatile in the buffer cache (and therefore where recovery must begin).
+Recovery replays the redo log this point to the end, reproducing the state at failure in the buffer cache and store; ARIES ``replays history," recovering the failed database.
+Afterwards, incomplete transactions are removed using the appropriate undo log entries.
+Undo log entries contain a transaction number and refer to the previous entry generated from the same transaction.
+
+While a centralized log orders all database updates, the software additionally enforces that the log entry persists before the store page for every operation.
+Transactions commit by generating a commit log entry, which must necessarily persist after the transaction's other log entries (since the log persists in order).
+This process guarantees that no transaction commits, or page persists, without a durable history of its modifications in the log.
+
+Though complex, ARIES improves database performance with disks.
+First, log writes appear as sequential accesses to disk, maximizing device throughput.
+Additionally, aside from reads resulting from buffer cache misses, each transaction depends on device access only at commit to flush log entries.
+All updates to the data store may be done at a later time, off of transactions' critical paths.
+In this way ARIES is designed from the ground up to minimize the effect of large disk access latencies.
