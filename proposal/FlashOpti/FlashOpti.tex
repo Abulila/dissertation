@@ -138,7 +138,6 @@ I execute queries with two projectivities: approximately 5\% (achieved by select
 In all experiments, I perform an equijoin on an integer field, and use an aggregation operator to avoid materializing the output.
 
 \input{FlashOpti/fig.runtime.tex}
-\input{FlashOpti/tab.joins.tex}
 
 I report results in graphical form in Figure~\ref{figure::joins} and absolute runtimes in Table~\ref{table::joins}.
 In Figure~\ref{figure::joins}, each group of bars shows the relative performance of sort-merge and hybrid hash joins on disk (darker bars) and Flash SSD (lighter bars), normalized to sort-merge performance on disk.
@@ -151,6 +150,8 @@ Hence, though both join algorithms benefit from the improved random IO performan
 Second, we note that, whereas there is significant performance variability between the join algorithms on disk (typically over 20\%), with the exception of a single outlier, the variability is far smaller on Flash SSD (often less than 1\%).
 From these results I conclude that although important on disk, the choice of sort-merge vs hybrid hash join on SSD leads to inconsequential performance differences relative to the drastic speedup of shifting data from disk to Flash.
 Hence, there is no compelling reason to make the query optimizer SSD-aware; the choice it makes assuming the performance characteristics of a disk will yield near-optimal performance on SSD.
+
+\input{FlashOpti/tab.joins.tex}
 
 I highlight two notable outliers in our results.
 On disk, the best join algorithm is strongly correlated to query projectivity with the exception of the 1.9GB~\texttimes~1.9GB join at 25\% projectivity.
