@@ -116,33 +116,31 @@ Until we have such devices, relation and rowid-sort scans will dominate, with IO
 \section{Join Analysis}
 \label{sec:FlashOpti:Joins}
 
-\input{FlashOpti/fig.runtime.tex}
-
-\input{FlashOpti/tab.joins.tex}
-
 We next study the variability in join performance across disk and Flash SSD.  
-Again, our objective is to identify cases where the optimal join algorithm for disk consistently results in grossly sub-optimal performance on Flash SSD.
+Again, the objective is to identify cases where the optimal join algorithm for disk consistently results in grossly sub-optimal performance on Flash SSD.
 Such scenarios imply that it is important for the optimizer to be SSD aware.
-
 
 DB2 implements nested loop, sort-merge, and hybrid hash join operators.  
 However, DB2 does not support a block nested loop join; its nested loop join performs the join tuple-by-tuple instead of prefetching pages or other blocks, relying on indexes to provide high performance.
-Hence, unless the join can be performed in memory, the nested loop grossly underperforms the other two algorithms for ad-hoc queries regardless of storage device and will not be selected by the query optimizer unless it is the only alternative (e.g., for inequality joins). 
-We therefore restrict our study to a comparison of sort-merge and hybrid hash joins.
+Hence, unless the join can be performed in memory, the nested loop grossly underperforms the other two algorithms for ad-hoc queries (those that do not use indexes) regardless of storage device and will not be selected by the query optimizer unless it is the only alternative (e.g., for inequality joins). 
+I therefore restrict the investigation to a comparison of sort-merge and hybrid hash joins.
 
 When a clustered index exists for a particular scan or join this index should almost always be used, regardless of the nature of the storage device.  
-Hence, we do not include clustered indexes in our analysis.
-Furthermore, we evaluate only ad hoc joins (joins without indexes or ``where'' clauses).
-When indexes are available, the choice of whether or not to use the index is analogous to the choice of which scan operator to use for a simple select query, which is covered by our analysis of scans.
+Hence, I do not include clustered indexes in my analysis.
+Furthermore, I evaluate only ad hoc joins.
+When indexes are available, the choice of whether or not to use the index is analogous to the choice of which scan operator to use for a simple select query, which is covered by the analysis of scans.
 
-Because of the complexity of the interplay between available memory capacity and relation sizes for join optimization \cite{DBLP:journals/vldb/HaasCLS97}, we do not have a specific expectation that one join algorithm will universally outperform another on Flash SSD as opposed to disk.
-Rather, we perform a cross-product of experiments over a wide spectrum of relation sizes and output projectivities using the Wisconsin Benchmark database.  
-Haas's model demonstrates the importance of the relative sizes of input relations and main memory capacity on join performance; hence we explore a spectrum from joins that are only slightly larger than available memory (joining two 1.9GB tables) to those that are an order of magnitude larger (joining two 9.7GB tables).   
-We vary projectivity because we have discovered empirically that it impacts significantly the optimal join algorithm on disk, as it has a strong influence on partition size in hybrid hash joins.
-We perform queries with two projectivities: approximately 5\% (achieved by selecting all the integer fields in the Wisconsin Benchmark schema), and approximately 25\% (selecting an integer field and one of the three strings in the schema).
-In all experiments, we perform an equijoin on an integer field, and use an aggregation operator to avoid materializing the output.
+Because of the complexity of the interplay between available memory capacity and relation sizes for join optimization \cite{DBLP:journals/vldb/HaasCLS97}, I do not have a specific expectation that one join algorithm will universally outperform another on Flash SSD as opposed to disk.
+Rather, I perform a cross-product of experiments over a wide spectrum of relation sizes and output projectivities using the Wisconsin Benchmark database.  
+Haas's model demonstrates the importance of the relative sizes of input relations and main memory capacity on join performance; hence I explore a spectrum from joins that are only slightly larger than available memory (joining two 1.9GB tables) to those that are an order of magnitude larger (joining two 9.7GB tables).   
+I vary projectivity, having discovered empirically that it significantly impacts the optimal join algorithm on disk, as it has a strong influence on partition size in hybrid hash joins.
+I execute queries with two projectivities: approximately 5\% (achieved by selecting all the integer fields in the Wisconsin Benchmark schema), and approximately 25\% (selecting an integer field and one of the three strings in the schema).
+In all experiments, I perform an equijoin on an integer field, and use an aggregation operator to avoid materializing the output.
 
-We report results in graphical form in Figure~\ref{figure::joins} and absolute runtimes in Table~\ref{table::joins}.
+\input{FlashOpti/fig.runtime.tex}
+\input{FlashOpti/tab.joins.tex}
+
+I report results in graphical form in Figure~\ref{figure::joins} and absolute runtimes in Table~\ref{table::joins}.
 In Figure~\ref{figure::joins}, each group of bars shows the relative performance of sort-merge and hybrid hash joins on disk (darker bars) and Flash SSD (lighter bars), normalized to sort-merge performance on disk.
 Lower bars indicate higher performance.
 We provide the same data in tabular form to illustrate the runtime scaling trends with respect to relation size, which are obscured by the normalization in the graph.
@@ -151,13 +149,23 @@ Two critical results are immediately apparent from the graph.
 First, Flash SSDs typically outperform disk by 5\texttimes~to 6\texttimes~regardless of join algorithm, a margin that is substantially higher than the gap in sequential IO bandwidth, but far smaller than the gap in random IO bandwidth (see Table~\ref{table::DiskCharacteristics}).
 Hence, though both join algorithms benefit from the improved random IO performance of SSDs, the benefit is muted compared to the 100\texttimes~device-level potential.
 Second, we note that, whereas there is significant performance variability between the join algorithms on disk (typically over 20\%), with the exception of a single outlier, the variability is far smaller on Flash SSD (often less than 1\%).
-From these results, we draw our central conclusion: although important on disk, the choice of sort-merge vs. hybrid hash join on SSD leads to inconsequential performance differences relative to the drastic speedup of shifting data from disk to Flash.
-Hence, we see no compelling reason to make the query optimizer SSD-aware; the choice it makes assuming the performance characteristics of a disk will yield near-optimal performance on SSD.
+From these results I conclude that although important on disk, the choice of sort-merge vs hybrid hash join on SSD leads to inconsequential performance differences relative to the drastic speedup of shifting data from disk to Flash.
+Hence, there is no compelling reason to make the query optimizer SSD-aware; the choice it makes assuming the performance characteristics of a disk will yield near-optimal performance on SSD.
 
-We highlight two notable outliers in our results.
-On disk, the best join algorithm is strongly correlated to query projectivity with the exception of the 1.9GB~\texttimes~1.9GB join at 27\% projectivity.
-Because the required hash table size for this join is close to the main memory capacity, we conjecture that this performance aberration arises due to DB2 selecting poor partition sizes for the join.
-Second, on Flash, we observe a large performance difference (over 2\texttimes) between sort-merge and hybrid hash join for our largest test case, a 9.7GB~\texttimes~9.7GB join at 27\% projectivity.
+I highlight two notable outliers in our results.
+On disk, the best join algorithm is strongly correlated to query projectivity with the exception of the 1.9GB~\texttimes~1.9GB join at 25\% projectivity.
+Because the required hash table size for this join is close to the main memory capacity, I believe that this performance aberration arises due to DB2 selecting poor partition sizes for the join.
+Second, on Flash, I observe a large performance difference (over 2\texttimes) between sort-merge and hybrid hash join for our largest test case, a 9.7GB~\texttimes~9.7GB join at 25\% projectivity.
 For this query, we observe a long cpu-bound period with negligible IO at the end of the hybrid hash join that does not occur for any of the other hash joins.
-Hence, we conclude that this performance aberration is unrelated to the type of storage device, and may have arisen due to the methods we must employ to coax the optimizer to choose this join algorithm.
-In any event, we do not believe either of these outliers outweigh our broader conclusion that there is no particular need for the query optimizer to be SSD aware.
+Hence, I believe that this performance aberration is unrelated to the type of storage device, and may have arisen due to the methods employed to coax the optimizer to choose this join algorithm.
+In any event, neither of these outliers outweigh the broader conclusion that there is no particular need for the query optimizer to be SSD aware.
+
+\section{Conclusion}
+\label{sec:FlashOpti:Conclusion}
+Flash-based solid state disks provide an exciting new high-performance alternative to disk drives for database applications.
+My investigation of SSD-aware query optimization was motivated by a hope that the drastically improved random IO performance on SSDs would result in a large shift in optimal query plans relative to existing optimizations.
+At a minimum, I expected that constants capturing relative IO costs in the optimizer would require update.
+This chapter presented evidence that refutes this expectation, instead showing that an SSD-oblivious query optimizer is unlikely to make significant errors in choosing access paths or join algorithms.
+Specifically, I demonstrate both empirically and analytically that the range of selectivities for which a scan operation can benefit from SSDs' fast random reads is so narrow that it is inconsequential in practice.
+Moreover, measurements of alternative join algorithms reveal that their performance variability is far smaller on SSDs and is dwarfed by the 5\texttimes~to 6\texttimes~performance boost of shifting data to SSD. 
+Overall, I conclude that the small and inconsistent performance gains available by making query optimizers SSD-aware are not worth the effort.
