@@ -8,24 +8,25 @@ The purpose of discussing database optimizations is to understand the complicati
 I start with a survey of storage technologies including disk, flash, and upcoming NVRAM.
 For each, I provide the operating principles and interesting technological trends.
 
-\begin{table}
-  \centering
-  \begin{tabular}{ l  l  l }
-  %\begin{tabular}{r@{\hspace{12pt}}c@{\hspace{12pt}}c@{\hspace{12pt}}}
-  \hline
-   & Disk & Flash \\
-  \hline
-   Model & WD VelociRaptor 10Krpm & OCZ RevoDrive \\
-   Capacity & 300gb & 120gb \\
-   Price & \$164 & \$300 \\
-   Random Read & 10ms & 90$\muup$s \\
-   Seq. Read & 120mb/s & 190mb/s \\
-  \hline
-  \end{tabular}
-
-  \caption{Disk Characteristics}
-  \label{table:DiskCharacteristics}
-\end{table}
+\input{Background/tab.devices.tex}
+%\begin{table}
+%  \centering
+%  \begin{tabular}{ l  l  l }
+%  %\begin{tabular}{r@{\hspace{12pt}}c@{\hspace{12pt}}c@{\hspace{12pt}}}
+%  \hline
+%   & Disk & Flash \\
+%  \hline
+%   Model & WD VelociRaptor 10Krpm & OCZ RevoDrive \\
+%   Capacity & 300gb & 120gb \\
+%   Price & \$164 & \$300 \\
+%   Random Read & 10ms & 90$\muup$s \\
+%   Seq. Read & 120mb/s & 190mb/s \\
+%  \hline
+%  \end{tabular}
+%
+%  \caption{Disk Characteristics}
+%  \label{table:DiskCharacteristics}
+%\end{table}
 
 \subsection{Disk}
 \label{sec:Background:Storage:Disk}
