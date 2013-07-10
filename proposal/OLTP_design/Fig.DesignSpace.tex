@@ -1,0 +1,12 @@
+\begin{table*}
+  \centering
+  \renewcommand{\arraystretch}{1.5}
+  \begin{tabular*}{\textwidth}{l l l l}
+     & \NVDisk & \InPlace & \GroupCommit \\
+    \emph{Software buffer} & \cellcolor[gray]{.8}Traditional WAL/ARIES & \cellcolor[gray]{.8}Updates both buffer and NVRAM & \cellcolor[gray]{.8}Buffer limits batch size \\
+    \emph{Hardware buffer} & \cellcolor[gray]{.95}Impractical & \cellcolor[gray]{.95}Slow uncached NVRAM reads & \cellcolor[gray]{.95}Requires hardware support \\
+    \emph{Replicate to DRAM} & \multicolumn{3}{l}{\cellcolor[gray]{.8}Provides fast reads and removes buffer management, but requires large DRAM capacity} \\
+  \end{tabular*}
+  \caption{\textbf{NVRAM design space.} Database designs include recovery mechanisms (top) and cache configurations (left).}
+  \label{table::DesignSpace}
+\end{table*}

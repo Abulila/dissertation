@@ -6,7 +6,10 @@ I was the sole graduate student and technical contributer (programming and runni
 I would especially like the thank Brian and Bill for bringing industry's point of view and ``real world" examples to this collaboration.
 
 This chapter outlines the problems with existing disk recovery management, the potential pitfalls of using NVRAM for persistent applications, a methodology for evaluating NVRAM devices that do not yet exist, and a description of several candidate software designs for NVRAM recovery management, to be evaluated later.
-I consider this chapter largely complete with one exception: I have performed a validation of my timing model that has not yet been published that I intend to include in the final thesis. \fixme{forward ref a section}
+I consider this chapter largely complete with two exceptions.
+First, I have performed a validation of my timing model that has not yet been published that I intend to include in the final thesis \fixme{forward ref a section}.
+Second, my implementation of \GroupCommit is more complex (and interesting, in my opinion) than a 12 page journal paper allows room to describe.
+I intend to include a detailed description in Section \fixme{forward ref}.
 
 \section{Introduction}
 \label{sec:OLTP_design:Intro}
@@ -48,3 +51,173 @@ This chapter outlines an approach to architecting recovery management for transa
 I discuss potential performance problems with using NVRAM and possible software architectures to address these problems.
 Additionally, I propose an evaluation framework, involving memory trace analysis, code annotation, and precise timing models for OLTP running on existing hardware platforms.
 Subsequent chapters will build on the designs and methodology presented here to determine when OLTP must be redesigned and what problems might remain.
+
+\section{Recovery Management Design}
+\label{sec:OLTP_design:Design}
+
+\input{OLTP_design/Fig.DesignSpace.tex}
+
+Near-future NVRAM devices will undoubtedly be faster than both disk and flash.
+However, compared to DRAM many NVRAM technologies impose slower reads and significantly slower persistent writes.
+We must consider both in redesigning OLTP for NVRAM.
+
+\subsection{NVRAM Reads}
+\label{sect:OLTP_design:Design:Reads}
+While the exact read performance of future NVRAM technologies is uncertain, many technologies and devices increase read latency relative to DRAM.
+Current databases and computer systems are not equipped to deal with this read latency.
+Disk-backed databases incur sufficiently large read penalties (on the order of milli-seconds) to justify software-managed DRAM caches and buffer management.
+On the other hand, main-memory databases rely only on the DRAM memory system, including on-chip data caches.
+Increased memory latency and wide-spread data accesses may require hardware or software-controlled DRAM caches even when using byte addressable NVRAM.
+
+I consider three configurations of cache management; these alternatives form the three rows of Table~\ref{table::DesignSpace} (subsequent sections consider the recovery management strategies, forming the three columns).
+The first option, \emph{Software Buffer}, relies solely on software to manage a DRAM buffer cache, as in conventional disk-backed database systems.
+The cache may be removed entirely or execution relies soly on a \emph{Hardware Buffer}, as in main-memory databases.
+Hardware caches are fast (e.g., on-chip SRAM) and remove complexity from the software, but provide only limited capacity.
+Third, one might \emph{replicate to DRAM} all data that is stored in NVRAM---all writes update both DRAM and NVRAM (for recovery), but reads retrieve data exclusively from DRAM.
+Replicating data ensures fast reads by avoiding increased NVRAM read latencies (except for recovery) and simplifies buffer management, but requires large DRAM capacity.
+
+\subsection{NVRAM Writes}
+\label{section::DesignSpace::Writes}
+
+Persistent writes, unlike reads, do not benefit from cach\-ing; writes persist through to the device for recovery correctness.
+Additionally, NVRAM updates must be carefully ordered to ensure consistent recovery.
+I assume that ordering is enforced through a generic mechanism called a \emph{persist barrier}, which guarantees that writes before the barrier persist before any dependant operations after the barrier persist.
+
+Persist barriers may be implemented in several ways.
+The easiest, but worst performing, is to delay threads that issue persist barriers until all pending NVRAM writes successfully persist.
+More complicated mechanisms improve performance by allowing threads to continue executing beyond the persist barrier and only delaying thread execution when persist conflicts arise (i.e., a thread reads or overwrites shared data from another thread that has not yet persisted).
+BPFS provides an example implementation of this mechanism \cite{ConditNightingale09}.
+Regardless of how they are implemented, persist barriers can introduce expensive synchronous delays on transaction threads; the optimal recovery mechanism depends on how expensive, on average, persist barriers become.
+To better understand how persist barriers are used and how frequently they occur, I outline operations to atomically update persistent data using persist barriers, and use these operations to implement three recovery mechanisms for NVRAM.
+
+\textbf{Atomic durable updates.}
+\input{OLTP_design/Fig.Code.tex}
+Figure~\ref{fig::Code} shows two operations to atomically update NVRAM data.
+The first, \texttt{persist\_wal()}, persists log entries into an ARIES log.
+Sho\-re-MT log entries are post-pended with their Log Serial Number (LSN -- log entry file offset).
+At recovery, a log entry is considered valid only if this tail LSN matches the location of the entry.
+I persist log entries atomically by first persisting an entry without its tail LSN, and only later (once we are certain the entry is persistent) persist the LSN.
+This order is enforced by inserting a persist barrier between writing the log entry and its LSN.
+Additionally, I reduce the number of persist barriers by persisting entries in batches, writing several log entries at once (without LSNs), followed by all their LSNs, separated by a single persist barrier.
+It is entirely possible (yet unlikely) that pre-existing LSN tails already match the log entry's offset; tails must be checked and first reset when this occurs.
+Log operations introduce two persist barriers---one to ensure that log entries persist before their LSNs, and one to enforce that LSNs persist before the thread continues executing.
+
+The second operation, \texttt{persist\_page()}, atomically persists page data with the use of a persistent undo page log.
+First, the page's original data is copied from NVRAM to the page log.
+The page log is marked valid and the dirty version of the page is copied to NVRAM (or updated in-place while locks are held).
+Finally, the log is marked invalid.
+Four persist barriers ensure that each update persists before the next, enforcing consistency at all points in execution.
+Recovery checks the valid flags of all page logs, copying any valid log back in-place.
+The log is always valid while the page persists in-place, protecting against partial NVRAM writes.
+Together, \texttt{persist\_wal()} and \texttt{persist\_page()} provide the tools necessary to build our recovery mechanisms.
+I discuss these mechanisms next, describing their implementation and performance.
+
+\textbf{NVRAM Disk-Replacement.}
+NVRAM database systems will likely continue to rely on ARIES/WAL at first, using NVRAM as \NVDisk.
+WAL provides recovery for disk by keeping an ordered log of all updates, as described in Section~\ref{sec:Background:Recovery}.
+While retaining disk's software interface, NVRAM disk accesses are implemented as copies between the volatile and nonvolatile address spaces.
+\NVDisk in Shore-MT persists the log and pages with \texttt{persist\_wal()} and \texttt{persist\_page()}, respectively.
+However, persists occur on log and page flusher threads, and transaction threads do not observe persist barrier delays (except when waiting for commit log entries to persist).
+\NVDisk provides low recovery latency by aggressively flushing pages, minimizing the size of data to recover.
+While requiring the least engineering effort, \NVDisk contains large software overheads to maintain a centralized log and asynchronously flush pages.
+Next, I leverage NVRAM's low latency to reduce these overheads.
+
+\textbf{In-Place Updates.}
+Fast, byte-addressable NVRAM allows updates to persist in-place and enforce persist order immediately, a design we call \InPlace.
+\InPlace allows us to remove the centralized log by replacing redo and undo log functionality elsewhere.
+I remove redo logs by keeping the database's durable state up-to-date.
+In ARIES terms, the database is constantly at its replayed state---there is no need to replay a redo log after failure.
+Undo logs need not maintain a global order (transactions are already free to roll back in any order), and instead I distribute ARIES undo logs per transaction.
+Such non-concurrent logs are simpler and impose less overhead than centralized logs.
+Other databases (such as Oracle) already distribute undo logs in rollback segments \fixme{cite}.
+Transaction undo logs remain durable so that in-flight transactions at the time of failure can be rolled back.
+Each page update consists of (1) latching the page, (2) inserting an undo entry into the transaction-private undo log, using \texttt{persist\_wal()}, (3) updating the page in-place, using \texttt{persist\_page()} (without an intermediate volatile page), and (4) releasing the page latch.
+This protocol ensures all updates to a page, and updates within a transaction, persist in-order, and that no transaction reads data from a page until it is durable.
+Recovery applies undo logs for in-flight transactions; there is no need to replay a redo log.
+
+Persisting data in-place removes expensive redo logging and asynchronous page flushing, but introduces persist barriers on transactions' critical paths.
+For sufficiently short persist barrier delays \InPlace outperforms \NVDisk (if persist barrier delays are negligible \InPlace resembles existing non-recoverable in-memory databases).
+However, one would expect transaction performance to suffer as persist barrier delay increases.
+
+In response, I introduce \GroupCommit, a recovery mechanisms designed to minimize the frequency of persist barriers while still removing WAL.
+\GroupCommit is an entirely new design, committing instructions in large batches to minimize persist synchronization.
+The next section describes, in detail, the operation and data structures necessary to implement \GroupCommit.
+
+\section{NVRAM Group Commit}
+\label{sec:OLTP_design:GroupCommit}
+
+The two previous recovery mechanisms provide high throughput under certain circumstances, but also fail to perform in others.
+\NVDisk is insensitive to large persist barrier delays as it was originally designed for disk.
+However, it assumes IO delays to be the dominant performance bottleneck and trades off software overhead to minimize IO.
+\InPlace, on the other hand, excels when persist barriers delays are short.
+As persist barrier latency increases performance suffers, such that \NVDisk eventually performs better.
+Here, I provide a third option, coupling \NVDisk's persist barrier latency-insensitivity with \InPlace's low software overhead: \GroupCommit.
+The original description of \GroupCommit is brief, as a detailed description of batching is not necessary to understand NVRAM's role in steering recovery management design.
+To be thorough, these details are included here.
+
+\GroupCommit operates by executing transactions in batches, whereby all transactions in the batch commit or (on failure) all transactions abort.
+Transactions quiesce between batches, allowing only transactions from the oldest batch to execute.
+Each transaction maintains a private ARIES-style undo log, supporting abort and roll-back as in \InPlace, but transaction logs are no longer persistent.
+ARIES undo logs support concurrent durable transactions.
+As batches persist atomically, transactions no longer roll back selectively during recovery, obviating the need for persistent ARIES undo logs.
+Instead, recovery relies on a database-wide undo log and staging buffer to provide durable atomic batches.
+
+\GroupCommit limits persist barrier frequen\-cy by enforcing persistence by batch rather than by transaction.
+Persisting a batch resembles \texttt{persist\_page()}, used across the entire database, once per batch.
+Because undo logging is managed at the batch level, transactions' updates may not persist in-place to NVRAM until all transactions in the batch complete.
+Rather, transactions write to a volatile staging buffer, tracking dirtied cache lines in a concurrent bit field.
+The bit field facilities quickly finding all dirtied data at batch completion.
+Once the batch ends and all transactions complete, the pre-batch version of dirtied data is copied to the database-wide persistent undo log, only after which is data copied from the staging buffer in-place to NVRAM.
+Finally, the database-wide undo log is invalidated, transactions commit, and transactions from the next batch begin executing.
+%Batching allows NVRAM persists to coalesce -- the log persists only the earliest version of data from the batch, while only the last version of data persists in-place, with intermediate values never persisting.
+On failure the log is copied back to the NVRAM database, aborting and rolling back all transactions from the in-flight batch.
+The key observation is that \GroupCommit persists entire batches of transactions using four persist barriers, far fewer than required with \InPlace.  Note, however, that it enables recovery only to batch boundaries, rather than transaction boundaries.
+
+We briefly outline two implementation challenges: long transactions and limited staging buffers.
+Long transactions present a problem by forcing all other transactions in the batch to defer committing until the long transaction completes.
+Limited staging buffers, not large enough to fit the entire data set, may fill while transactions are still executing.
+We solve both problems by resorting to persistent ARIES-style undo logs, as in \InPlace.
+Long transactions persist their ARIES undo log (previously volatile), allowing the remainder of the batch to persist and commit.
+The long transaction joins the next batch, committing when that batch commits.
+At recovery the most recent batch rolls back, and the long transaction's ARIES undo log is applied, removing updates that persisted with previous batches.
+Similarly, if the staging buffer fills, the current batch ends immediately and all outstanding transactions persist their ARIES undo logs.
+The batch persists, treating any in-flight transactions as long transactions, reassigning them to the next batch.
+Transaction-local ARIES undo logs invalidate as the batch commits, requiring additional persistent data structures to allow transaction and batch logs to invalidate atomically.
+
+\GroupCommit requires fewer persist barriers than \InPlace yet avoids expensive logging found in \NVDisk.
+A batch requires only four persist barriers, regardless of batch length.
+Expensive persist barrier delays can be amortized over additional transactions by increasing batch length, improving throughput.
+Batch length must be at least large enough to amortize time spent quiescing transactions between batches.
+However, increasing batch length defers commit for all transactions in the batch, increasing transaction latency.
+
+\subsection{Design Space}
+\label{section::DesignSpace::Designs}
+We describe the space of possible designs given our choices regarding NVRAM read and write performance.
+Our discussion ignores possible uses of hard disk to provide additional capacity.
+Each design works alongside magnetic disk with additional buffer management and the constraint that pages persist to disk before eviction from NVRAM.
+
+Table~\ref{table::DesignSpace} lists the possible combinations of caching architectures and recovery mechanisms.
+The left column presents \NVDisk, which we see as the obvious and most incremental use for NVRAM.
+Of note is the center-left cell, \NVDisk without the use of a volatile buffer.
+WAL, by its design, allows pages to write back asynchronously from volatile storage.
+Removing the volatile cache requires transactions to persist data in-place, but do so only after associated log entries persist, retaining the software overheads of \NVDisk as well as the frequent synchronization in \InPlace.
+We find this design impractical.
+
+The middle-column recovery mechanism, \InPlace, represents the most intuitive use of NVRAM in database systems, as noted in several prior works.
+Agrawal and Jagadish explore several algorithms for atomic durable transactions with an NVRAM main-memory \cite{AgrawalJagadish89}.
+They describe the operation and correctness of each mechanism and provide an analytic cost model to compare them.
+Their work represents the middle column, middle row of Table~\ref{table::DesignSpace} (\InPlace with no volatile buffer).
+Aky\"{u}rek and Salem present a hybrid DRAM and NVRAM buffer cache design alongside strategies for managing cache allocation \cite{SalemAkyrek95}.
+They evaluate their allocation strategies using database traces and queuing models to demonstrate the effectiveness of NVRAM at accelerating persistent writes.
+Partial Memory Buffers is closest to the middle-top cell of our design space table (\InPlace with a software-managed DRAM buffer), although that design considers NVRAM as part of a hybrid buffer, not the primary persistent store.
+None of these works considers alternative approaches (such as \GroupCommit), to account for large persist barrier latency and associated delays.
+Additionally, we extend prior work by providing a more precise performance evaluation and more detailed consideration of NVRAM characteristics.
+
+The right column presents \GroupCommit.
+We are not aware of any previous work that extends disk group commit to reduce the frequency of NVRAM persist barriers.
+A limited-capacity staging buffer (i.e., one insufficient for the entire data set) may limit batch size, as described above.
+
+Each of our three recovery mechanisms may replicate all data between NVRAM and DRAM to ensure fast read accesses, manage a smaller DRAM buffer cache, or omit the cache altogether.
+In Section~\ref{section::Reads} we consider the importance of NVRAM caching to transaction throughput.
+Then, in Section~\ref{section::Persists} we assume a DRAM-replicated data store to isolate read performance from persist performance in evaluating each recovery mechanisms's ability to maximize transaction throughput.
+The next section describes our evaluation methodology.

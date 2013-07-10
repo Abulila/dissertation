@@ -1,0 +1,35 @@
+\newsavebox{\persistwal}
+\begin{lrbox}{\persistwal}
+\begin{lstlisting}
+persist_wal(log_buffer, nvram_log)
+  for entry in log_buffer:
+    nvram_log.force_last_lsn_invalid(entry)
+    nvram_log.insert_body(entry) # no lsn
+  persist_barrier()
+  nvram_log.update_lsns()
+  persist_barrier()
+\end{lstlisting}
+\end{lrbox}
+
+\newsavebox{\persistpage}
+\begin{lrbox}{\persistpage}
+\begin{lstlisting}
+persist_page(page_v, page_nv, page_log)
+  page_log.copy_from(page_nv)
+  persist_barrier()
+  page_log.mark_valid()
+  persist_barrier()
+  page_nv.copy_from(page_v)
+  persist_barrier()
+  page_log.mark_invalid()
+  persist_barrier()
+\end{lstlisting}
+\end{lrbox}
+
+\begin{figure}[]
+  \subfigure{ \usebox{\persistwal} }
+  \subfigure{ \usebox{\persistpage} }
+
+  \caption{\textbf{Durable atomic updates.} \texttt{persist\_wal()} appends to the ARIES log using two persist barriers.  \texttt{persist\_page()} persists pages with four persist barriers.}
+  \label{fig::Code}
+\end{figure}
