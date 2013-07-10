@@ -1,0 +1,67 @@
+This chapter attempts to determine if database query optimizers must be SSD-aware.
+The work was originally published in the Second International Workshop on Accelerating Data Management Systems Using Modern Processor and Storage Architectures (AMDS 2011), collocated with VLDB \fixme{cite}.
+I worked on this project with my advisor, Thomas F. Wenisch, and assistant professor Kristen LeFevre.
+Working under their advisement, I was the sole graduate student and technical contributor (database and programming effort).
+Refer to Sections~\ref{sec:Background:Storage} and~\ref{sec:Background:Analytics} for necessary background on this topic.
+While the project ended in a negative result, it was instrumental developing my understanding of databases and storage management.
+After completing this work I moved from considering flash to emerging NVRAM technologies; I propose no future work or extensions to this chapter.
+
+\section{Introduction}
+\label{sec:FlashOpti:Intro}
+
+For decades, database management systems (DBMSs) have used rotating magnetic disks to provide durable storage.
+Though inexpensive, disks are slow, particularly for non-sequential access patterns due to high seek latencies.
+With the rapid improvements in storage density and drop in price of Flash-based Solid State Disks (SSDs), DBMS administrators are beginning to supplant conventional rotating disks with SSDs for performance-critical data in myriad DBMS applications.
+Though SSDs are several factors more expensive than conventional disks (in terms of \$ per GB), they provide modest (2\texttimes) improvements in sequential IO and drastic (over 100\texttimes) improvements for random IO, closing the gap between these access patterns.
+
+Many components of modern DBMSs have been designed to work around the adverse performance characteristics of disks (e.g., page-based buffer pool management, B-tree indexes, advanced join algorithms, query optimization to avoid non-sequential IO, prefetching, and aggressive IO request reordering).  
+As SSDs present substantially different performance trade-offs, over the past few years researchers have begun to examine how SSDs are best deployed for a variety of storage applications \cite{Bouganim09uflip:understanding, Chen2009}, including DBMSs \cite{Lee2008, Yin2009, Li2009, Baumann2010, Tsirogiannis2009}.  
+A common theme among these studies is to leverage the better random IO performance of SSDs through radical redesigns of index structures \cite{Yin2009, Li2009} and data layouts \cite{Baumann2010, Tsirogiannis2009}. 
+However, even within the confines of conventional storage management and indexing schemes in commercial DBMSs, there may be substantial opportunity to improve query optimization by making it SSD-aware.
+
+In this chapter, I examine the implications that moving a database from disk to Flash SSDs will have for query optimization in conventional commercial DBMSs.
+I focus on optimization of read-only queries (e.g., as are common in analytics decision support workloads) as these operations are less sensitive to the SSD adoption barriers identified in prior work, such as poor SSD write/erase performance \cite{Chen2009} and write endurance \cite{Roberts2009}.
+Conventional query optimizers assume a storage cost model where sequential IOs are far less costly than random IOs, and select access paths and join algorithms based on this assumption.
+The recent literature \cite{Baumann2010} suggests that on SSDs, optimizers should instead favor access paths using non-clustered indexes more frequently; SSDs will favor retrieving more rows via an index if it reduces the number of pages accessed, even if it increases random IO accesses.
+Furthermore, as SSDs change the relative costs of computation, sequential, and random IO, the relative performance of alternative join algorithms should be re-examined, and optimizer cost models updated.
+
+My original intent was to leverage this idea to 1) improve query optimization by making device-specific decisions, and 2) accelerate database analytics and reduce operating costs by intelligently placing data on different devices.
+While flash is faster than disk, it is generally more expensive per equal capacity.
+It makes sense to place small amounts of frequently accessed data on flash, and the rest on disk.
+Furthermore some data ``prefers" to live on flash as it is accessed in ways that flash can take advantage of (e.g., queries typically access this data in selectivities or join types that prefer flash).
+
+Despite this intuition, my empirical investigation using a commercial DBMS finds \emph{it is not necessary to make any adjustments to the query optimizer when moving data from disk to Flash}---an SSD-oblivious optimizer generally makes effective choices.
+I demonstrate this result, and explore why it is the case, in two steps.
+
+First, I analyze the performance of scan operators.  
+Classic rules of thumb suggest that non-clustered index scans are preferable at low selectivity (e.g., below 10\%), whereas a relation scan is faster at high selectivity, because it can leverage sequential IOs.
+Therefore, the optimizer should prefer index scans at much higher selectivities on SSDs.  
+I demonstrate analytically and empirically that this intuition is false---the range of selectivities for which an index scan operation can benefit from SSDs' fast random reads is so narrow that it is inconsequential in practice.
+
+Second, I measure the relative performance of hybrid hash and sort-merge joins on disk and Flash.
+My results indicate that the performance variation between the join algorithms is typically smaller (and often negligible) on Flash, and is dwarfed by the 5\texttimes~to 6\texttimes~performance boost of shifting data from disk to SSD.
+ I conclude that because commercial DBMSs have been so heavily optimized to hide the long access latencies of disks (e.g., through sophisticated prefetching and buffering), they are largely insensitive to the latency improvements available on SSDs.
+Overall, the small and inconsistent performance gains available by making query optimizers SSD-aware are not worth the effort.
+
+\section{Methodology}
+\label{sec:FlashOpti:Methodology}
+The objective of this empirical study is to contrast the performance of alternative scan and join algorithms for the same queries to discover whether the optimal choice of access path or join algorithm differs between SSDs and conventional disks.
+For either storage device, the optimal access path depends on the selectivity of the selection predicate(s).
+The optimal join algorithm depends on several factors: the sizes of the inner and outer relations, the selectivity and projectivity of the query, the availability of indexes, and the available memory capacity.
+The goal is to determine whether the regions of the parameter space where one algorithm should be preferred over another differ substantially between SSD and disk because of the much better random read performance of the SSD.
+In other words, I am trying to discover, empirically, cases where an access path or join algorithm that is an appropriate choice for disk results in substantially sub-optimal performance on an SSD, suggesting that the optimizer must be SSD-aware.
+
+I carry out this empirical investigation using IBM DB2 Enterprise Server Edition version 9.7.
+Experiments use the Wisconsin Benchmark schema \cite{Bitton83benchmarkingdatabase} to provide a simple, well-documented dataset on which to perform scans and joins.
+Though this benchmark does not represent a particular real-world application, modeling a full application is not our intent.
+Rather, the Wisconsin Benchmark's uniformly distributed fields allows us to control precisely the selectivity of each query.
+Whereas real world queries are more complicated than the simple scans and joins we study, these simple microbenchmarks reveal the underlying differences between the storage devices and scan/join algorithms most clearly.
+Alternative ``real world" benchmarks (namely TPC-H \fixme{cite}) complicate matters, making it difficult to discern why different query plans prefer disk or SSD.
+I aggregate results of all queries to avoid materializing output tables as I am primarily interested in isolating other database operations; typically all results must be aggregated regardless of device, so we remove this step to provide a better comparison.
+I run queries on a Pentium Core Duo with 2GB main memory, a 7200 RPM root disk drive, and the conventional and SSD database disks described in Table \ref{table::DiskCharacteristics}.
+Both the hard disk and SSD were new at the beginning of the experiments.
+While other work has shown that SSD performance may degrade over the lifetime of the device I did not observe any change in performance.
+
+Note that I am not concerned with the optimization decisions that DB2 presently makes for either disk or SSD; rather, I am seeking to determine the ground truth of which algorithm a correct optimizer should prefer for each storage device. 
+Originally, I achieved this by varying input parameters to the query optimizer, namely the disk seek latency and sequential access throughput.
+Ultimately I discovered that query plan can be established directly by the user, and used DB2's optimization profiles to explicitly set the query plan for each query.
