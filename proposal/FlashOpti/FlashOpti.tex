@@ -65,3 +65,6 @@ While other work has shown that SSD performance may degrade over the lifetime of
 Note that I am not concerned with the optimization decisions that DB2 presently makes for either disk or SSD; rather, I am seeking to determine the ground truth of which algorithm a correct optimizer should prefer for each storage device. 
 Originally, I achieved this by varying input parameters to the query optimizer, namely the disk seek latency and sequential access throughput.
 Ultimately I discovered that query plan can be established directly by the user, and used DB2's optimization profiles to explicitly set the query plan for each query.
+
+\section{Methodology}
+\label{sec:FlashOpti:Scans}
