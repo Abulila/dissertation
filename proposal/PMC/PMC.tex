@@ -1,0 +1,43 @@
+This chapter motivates and defines \emph{Persistent Memory Consistency}.
+This should be considered future work and I welcome feedback.
+I first define the problem and then give examples of persistent memory consistency models.
+In the next chapter I give examples of programming patterns, why they require relaxed persistent consistency models, and possible optimizations.
+
+\section{Introduction}
+\label{sec:PMC:Intro}
+
+Future NVRAMs will provide a persistent store with the programming interface of modern main memories.
+While such technologies could revolutionize the design of recoverable systems and durable storage, questions remain regarding device performance and the NVRAM programming model.
+Chapters~\fixme{ref} and~\fixme{ref} consider an abstract \emph{persist barrier} capable of enforcing persist order or blocking until previous persists complete.
+Instead of considering an implementation or exact semantics of these barriers, I instead looked at the effect average persist barrier latency had on OLTP software design.
+This project delves into the details of persist barriers, considering their implementation, performance impact, and programming model.
+
+Persist barriers exist as a tool for programmers to ensure correct persistence behavior, while at the same time improving performance.
+Imagine an NVRAM model where persist barriers do not exist.
+Without persist barriers, the only way for the programmer to reason about persist order is for all persists to truly occur in program order.
+This is in fact a popular model for DRAM programming, but the volatile semantics of DRAM writes to execute to fast caches.
+NVRAM persists, on the other hand, must always execute to a long latency memory; executing all NVRAM persists in-order will introduce frequent, substantial stalls.
+Persist barriers remove these stalls by allowing all persists between barriers to occur in parallel.
+This is a prime example of using a more sophisticated programming model to provide performance optimizations.
+
+Additional questions remain when persistent memory is shared between threads or processes.
+Currently, memory consistency models define how threads communicate and what barriers are necessary to ensure proper behavior.
+Memory consistency models exist because processors prefer to run instructions out of order -- a pervasive optimization that significantly complicates multi-threaded programming.
+While consistency models control the order in which threads observe reads and writes, there is no similar definition for the order in which persists occur, or how persist order is enforced across communicating threads.
+Furthermore, persistent memories often care about the actual timing of persists, not just relative ordering -- for example, system calls must make sure that all previous persists have completed before notifying the user.
+In this case there is no alternative but to block until all data persists.
+These mechanisms are not present in existing consistency models.
+
+While memory consistency models provide a starting point for considering persistent consistency models, the performance differences of volatile memory systems/DRAM and NVRAM will require new programming models for NVRAM.
+In fact, the consistency and persistence models may be de-coupled.
+That is, the rules that define load and store order might be different between how \emph{values} are communicated and how \emph{persist order} is enforced.
+
+I wish to extend memory consistency models with persistence semantics to address these concerns.
+The goals are to determine how multi-threaded consistency interacts with persistence, how to relax consistency/persistency models to provide high performance and an easily programmable interface, and identify programming patterns likely to cause NVRAM bottlenecks alongside potential optimizations.
+All of these will eventually lead to the design of new persistent memory consistency models and implementations, yet that is most likely outside the scope of this project.
+
+The remainder of this chapter provides a brief background of memory consistency models before considering simple examples of persistent memory consistency models.
+In addition, I examine previous work, highlighting strengths and weaknesses, and placing it into my persistent memory consistency taxonomy.
+
+\section{Memory consistency models}
+\label{sec:PMC:MemoryConsistency}
