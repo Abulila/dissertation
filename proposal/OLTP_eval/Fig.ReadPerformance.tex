@@ -1,0 +1,23 @@
+\begin{figure}
+  \centering
+  \subfigure[TATP]{\label{fig::ReadPerformance::TATP} \includegraphics[width=.45\textwidth]{OLTP_eval/ReadPerformance_TATP.pdf}}
+  \subfigure[TPCB]{\label{fig::ReadPerformance::TPCB}\includegraphics[width=.45\textwidth]{OLTP_eval/ReadPerformance_TPCB.pdf}}
+  \subfigure[TPCC]{\label{fig::ReadPerformance::TPCC}\includegraphics[width=.45\textwidth]{OLTP_eval/ReadPerformance_TPCC.pdf}}
+%  \begin{subfigure}{0.32\textwidth}
+%    \includegraphics[width=\textwidth]{OLTP_eval/ReadPerformance_TATP.pdf}
+%    \caption{TATP}
+%    \label{fig::ReadPerformance::TATP}
+%  \end{subfigure}
+%  \begin{subfigure}{0.32\textwidth}
+%    \includegraphics[width=\textwidth]{OLTP_eval/ReadPerformance_TPCB.pdf}
+%    \caption{TPCB}
+%    \label{fig::ReadPerformance::TPCB}
+%  \end{subfigure}
+%  \begin{subfigure}{0.32\textwidth}
+%    \includegraphics[width=\textwidth]{OLTP_eval/ReadPerformance_TPCC.pdf}
+%    \caption{TPCC}
+%    \label{fig::ReadPerformance::TPCC}
+%  \end{subfigure}
+  \caption{\textbf{Throughput vs NVRAM read latency.} 100ns miss latency suffers less than a 10\% slowdown over DRAM.  Higher miss latencies see large slowdowns, requiring caching.  Fortunately, even small caches effectively accelerate reads.}
+  \label{fig::ReadPerformance}
+\end{figure}
