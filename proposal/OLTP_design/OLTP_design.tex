@@ -77,7 +77,7 @@ Third, one might \emph{replicate to DRAM} all data that is stored in NVRAM---all
 Replicating data ensures fast reads by avoiding increased NVRAM read latencies (except for recovery) and simplifies buffer management, but requires large DRAM capacity.
 
 \subsection{NVRAM Writes}
-\label{section::DesignSpace::Writes}
+\label{sec:OLTP_design:Design:Writes}
 
 Persistent writes, unlike reads, do not benefit from cach\-ing; writes persist through to the device for recovery correctness.
 Additionally, NVRAM updates must be carefully ordered to ensure consistent recovery.
@@ -152,8 +152,9 @@ However, it assumes IO delays to be the dominant performance bottleneck and trad
 \InPlace, on the other hand, excels when persist barriers delays are short.
 As persist barrier latency increases performance suffers, such that \NVDisk eventually performs better.
 Here, I provide a third option, coupling \NVDisk's persist barrier latency-insensitivity with \InPlace's low software overhead: \GroupCommit.
-The original description of \GroupCommit is brief, as a detailed description of batching is not necessary to understand NVRAM's role in steering recovery management design.
-To be thorough, these details are included here.
+
+\subsection{Description}
+\label{sec::OLTP_design:GroupCommit:Proposed}
 
 \GroupCommit operates by executing transactions in batches, whereby all transactions in the batch commit or (on failure) all transactions abort.
 Transactions quiesce between batches, allowing only transactions from the oldest batch to execute.
@@ -173,10 +174,10 @@ Finally, the database-wide undo log is invalidated, transactions commit, and tra
 On failure the log is copied back to the NVRAM database, aborting and rolling back all transactions from the in-flight batch.
 The key observation is that \GroupCommit persists entire batches of transactions using four persist barriers, far fewer than required with \InPlace.  Note, however, that it enables recovery only to batch boundaries, rather than transaction boundaries.
 
-We briefly outline two implementation challenges: long transactions and limited staging buffers.
+I briefly outline two implementation challenges: long transactions and limited staging buffers.
 Long transactions present a problem by forcing all other transactions in the batch to defer committing until the long transaction completes.
 Limited staging buffers, not large enough to fit the entire data set, may fill while transactions are still executing.
-We solve both problems by resorting to persistent ARIES-style undo logs, as in \InPlace.
+I solve both problems by resorting to persistent ARIES-style undo logs, as in \InPlace.
 Long transactions persist their ARIES undo log (previously volatile), allowing the remainder of the batch to persist and commit.
 The long transaction joins the next batch, committing when that batch commits.
 At recovery the most recent batch rolls back, and the long transaction's ARIES undo log is applied, removing updates that persisted with previous batches.
@@ -190,10 +191,63 @@ Expensive persist barrier delays can be amortized over additional transactions b
 Batch length must be at least large enough to amortize time spent quiescing transactions between batches.
 However, increasing batch length defers commit for all transactions in the batch, increasing transaction latency.
 
-\subsection{Design Space}
-\label{section::DesignSpace::Designs}
-We describe the space of possible designs given our choices regarding NVRAM read and write performance.
-Our discussion ignores possible uses of hard disk to provide additional capacity.
+\subsection{Proposed Work}
+\label{sec::OLTP_design:GroupCommit:Proposed}
+
+\GroupCommit only improves throughput so long as the time between batches to quiesce transactions, locate dirtied data, and persist that data is substantially less than time during each batch where transactions execute.
+To provide a fair comparison between recovery mechanisms, I implement a true version of \GroupCommit in Shore-MT.
+Whereas I expect NVRAM to have sufficient bandwidth to persist data quickly, orchestrating data copies, tracking dirty data with low overhead, and locating dirty data efficiently proved to be difficult software problems.
+The details of this implementation were omitted from the VLDB submission, but are included here, including work to be done.
+
+\textbf{Concurrent Dirty Set.}
+As described previously, \GroupCommit requires each batch to track dirty data.
+This is done with an efficient concurrent set, tracking the set of buffer pool cache lines dirtied by each batch.
+In order to maximize transaction throughput, this set must allow low overhead updates by concurrent threads during batch execution, and fast iteration during batch persist.
+
+The first attempt to create a set used an STL \emph{ordered\_set} (implemented as a balanced tree).
+However, inserting cache lines to the dirty set was prohibitively expensive, slowing transactions down.
+On the other hand, \emph{ordered\_set} allows relatively fast iteration over the dirty set during batch copy.
+The next attempt used a bitmap of dirty cache lines, each bit corresponding to a cache line in the buffer pool.
+A 10GB buffer pool requires 20MB of bits to track dirty cache lines.
+Before each batch starts, after the previous batch finishes persisting, dirty bits must be flash cleared in order to track the next batch.
+While bits can be quickly updated via an atomic OR operation, iterating over the dirty bits during persist was too slow, requiring a different solution.
+
+Instead, I leveraged the fact that dirty regions were rare and sparsely located throughput the buffer pool.
+Batches contain up to thousands of transactions, yet these transactions could only manage to write to a small portion of a 10GB buffer pool.
+It is therefore necessary to efficiently skip over large regions of clean data when iterating through the dirty set.
+To achieve this, I created a \emph{tiered bitfield set}.
+The tiered bitfield set contains two bitfield sets.
+The first is as described above, where each bit corresponds to a cache line in the buffer pool.
+In addition, there is a higher level bit field, each bit corresponding to a \emph{cache line of the primary bit field}.
+Thus, a set bit in the top level bit field indicates that some bit within a cache line of the primary bit field is set, which in turn corresponds to dirty cache line in the buffer pool.
+
+Updating this set requires atomic OR on the necessary bits in both bit fields of the set, a small cost.
+Iterating over the set now involves iterating over the (much smaller) top level bit field, finding \emph{segments} of the primary bit field known to contain at least one set bit.
+This iteration reduces both the number of instructions and cache/memory lines accessed, minimizing persist time between batches.
+
+I propose to include additional work demonstrating the sparse nature of writes to the buffer pool, as well as timing results that show that fast dirty line tracking and persist is possible.
+
+\textbf{Concurrent Persist.}
+I have shown that dirty lines can be tracked and iterated over efficiently.
+However, persisting each batch with the batch coordinator alone results in long persist delays.
+These delays are due to the \emph{software} overhead of copying data, not from NVRAM limitations.
+To reduce these delays all persist operations must be parallelized across threads.
+Luckily, we have threads to spare -- transaction threads that have quiesced between batches.
+Instead of sitting idle, these threads now participate in persisting each batch.
+
+The buffer pool address space and corresponding portions of the dirty line set are partitioned into several segments, each placed in a task queue.
+The batch coordinator and transaction threads blocked by the persist process each participate by accepting tasks to persist buffer pool partitions (both log and then data in-place).
+Once all tasks complete the batch commits, allowing the next batch to begin.
+
+I propose to include results showing that persist parallelization is necessary, but is an effective way to accelerate batching.
+
+Once both of these optimizations are implemented the system is using all cores to persist, and profiling shows that \emph{memcpy} operations, copies from the buffer pool to the persistent address space, are the primary bottleneck (memcpy is implemented using fast SSE instructions and cannot be optimized further).
+Persist time is minimized, and there is little room left for improvement.
+
+\section{Design Space}
+\label{sec:OLTP_design:Designs}
+I describe the space of possible designs given our choices regarding NVRAM read and write performance.
+This discussion ignores possible uses of hard disk to provide additional capacity.
 Each design works alongside magnetic disk with additional buffer management and the constraint that pages persist to disk before eviction from NVRAM.
 
 Table~\ref{table::DesignSpace} lists the possible combinations of caching architectures and recovery mechanisms.
@@ -201,7 +255,7 @@ The left column presents \NVDisk, which we see as the obvious and most increment
 Of note is the center-left cell, \NVDisk without the use of a volatile buffer.
 WAL, by its design, allows pages to write back asynchronously from volatile storage.
 Removing the volatile cache requires transactions to persist data in-place, but do so only after associated log entries persist, retaining the software overheads of \NVDisk as well as the frequent synchronization in \InPlace.
-We find this design impractical.
+Thus, this design is impractical.
 
 The middle-column recovery mechanism, \InPlace, represents the most intuitive use of NVRAM in database systems, as noted in several prior works.
 Agrawal and Jagadish explore several algorithms for atomic durable transactions with an NVRAM main-memory \cite{AgrawalJagadish89}.
@@ -211,13 +265,122 @@ Aky\"{u}rek and Salem present a hybrid DRAM and NVRAM buffer cache design alongs
 They evaluate their allocation strategies using database traces and queuing models to demonstrate the effectiveness of NVRAM at accelerating persistent writes.
 Partial Memory Buffers is closest to the middle-top cell of our design space table (\InPlace with a software-managed DRAM buffer), although that design considers NVRAM as part of a hybrid buffer, not the primary persistent store.
 None of these works considers alternative approaches (such as \GroupCommit), to account for large persist barrier latency and associated delays.
-Additionally, we extend prior work by providing a more precise performance evaluation and more detailed consideration of NVRAM characteristics.
+Additionally, This work extends prior work by providing a more precise performance evaluation and more detailed consideration of NVRAM characteristics.
 
 The right column presents \GroupCommit.
-We are not aware of any previous work that extends disk group commit to reduce the frequency of NVRAM persist barriers.
+I am not aware of any previous work that extends disk group commit to reduce the frequency of NVRAM persist barriers.
 A limited-capacity staging buffer (i.e., one insufficient for the entire data set) may limit batch size, as described above.
 
-Each of our three recovery mechanisms may replicate all data between NVRAM and DRAM to ensure fast read accesses, manage a smaller DRAM buffer cache, or omit the cache altogether.
-In Section~\ref{section::Reads} we consider the importance of NVRAM caching to transaction throughput.
-Then, in Section~\ref{section::Persists} we assume a DRAM-replicated data store to isolate read performance from persist performance in evaluating each recovery mechanisms's ability to maximize transaction throughput.
-The next section describes our evaluation methodology.
+Each of the three recovery mechanisms may replicate all data between NVRAM and DRAM to ensure fast read accesses, manage a smaller DRAM buffer cache, or omit the cache altogether.
+In Section~\ref{section::Reads} I consider the importance of NVRAM caching to transaction throughput.
+Then, in Section~\ref{section::Persists} I assume a DRAM-replicated data store to isolate read performance from persist performance in evaluating each recovery mechanisms's ability to maximize transaction throughput.
+The next section describes an evaluation methodology for OLTP on NVRAM.
+
+\section{Methodology}
+\label{sec:OLTP_design:Methodology}
+
+This section details the methodology for benchmarking transaction processing and modeling NVRAM performance.
+Experiments use the Shore-MT storage manager \cite{JohnsonPandis09}, including the high performance, scalable WAL implementation provided by Aether \cite{JohnsonPandis10}.
+While Aether provides a distributed log suitable for multi-socket servers, the distributed log exists as a fork of the main Shore-MT project.
+Instead, I limit experiments to a single CPU socket to provide a fair comparison between WAL and other recovery schemes, enforced using the Linux \emph{taskset} utility.
+Experiments place both the Shore-MT log and volume files on an in-memory \emph{tmpfs}, and provide sufficiently large buffer caches such that all pages hit in the cache after warmup.
+The intent is to allow the database to perform data accesses at DRAM speed and introduce additional delays to model NVRAM performance.
+Table~\ref{table::Specs} shows the experimental system configuration.
+
+\begin{table}
+  \centering
+  \begin{tabular}{l l}
+    \hline
+    Operating System & Ubuntu 12.04 \\
+    CPU & Intel Xeon E5645 \\
+    & 2.40 GHz \\
+    CPU cores & 6 (12 with HyperThreading) \\
+    Memory & 32 GB \\
+    \hline
+  \end{tabular}
+  \caption{\textbf{Experimental system configuration.}}
+  \label{table::Specs}
+\end{table}
+
+\textbf{Modeling NVRAM delays.}
+Since NVRAM devices are not yet available, we must provide a timing model that mimics their expected performance characteristics.
+I model NVRAM read and write delays by instrumenting Shore-MT with precisely controlled assembly-code delay loops to model additional NVRAM latency and bandwidth constraints at 20ns precision.
+Hence, Shore-MT runs in real time as if its buffer cache resided in NVRAM with the desired read and write characteristics.
+
+I introduce NVRAM read and write delays separately.
+Accurately modeling per-access increases in read latency is challenging, as reads are frequent and the expected latency increases on NVRAM are small.
+It is infeasible to use software instrumentation to model such latency increases at the granularity of individual reads; hardware support, substantial time dilation, or alternative evaluation techniques (e.g., simulation) would be required, all of which compromise accuracy and our ability to run experiments at full scale.
+Instead, I use offline analysis with PIN \cite{LukCohn05} to determine (1) the reuse statistics of buffer cache pages, and (2) the average number of cache lines accessed each time a page is latched.
+Together, these offline statistics provide an average number of cache line accesses per page latch event in Shore-MT while considering the effects of page caching.
+I then introduce a delay at each latch based on the measured average number of misses and an assumed per-read latency increase based on the NVRAM technology.
+
+I model NVRAM persist delays by annotating Shore-MT to track buffer cache writes at cache line granularity---64 bytes---using efficient ``dirty" bitmaps.
+Depending on the recovery mechanism, we introduce delays corresponding to persist barriers and to model NVRAM write bandwidth contention.
+Tracking buffer cache writes introduces less than a 3\% overhead to the highest throughput experiments.
+
+I create NVRAM delays using the x86 RDTSCP instruction, which returns a CPU-frequency-invariant, monotonically increasing time-stamp that increments each clock tick.
+RDTSCP is a synchronous instruction---it does not allow other instructions to reorder with it.
+The RDTSCP loop delays threads in increments of 20ns (latency per loop iteration and RDTSCP) with an accuracy of 2ns.
+
+In addition to NVRAM latency, I model shared NVRAM write bandwidth.
+Using RDTSCP as a clock source, I maintain a shared \emph{next\_available} variable, representing the next clock tick in which the NVRAM device is available to be written.
+Each NVRAM persist advances \emph{next\_available} to account for the latency of its persist operation.
+Reservations take the maximum of \emph{next\_available} and the current RDTSCP and add the reservation duration.
+The new value is atomically swapped into \emph{next\_available} via a Compare-And-Swap (CAS).
+If the CAS fails (due to a race with a persist operation on another thread), the process repeats until it succeeds.
+Upon success, the thread delays until the end of its reservation.
+The main limitation of this approach is that it cannot model reservations shorter than the delay required to perform a CAS to a contended shared variable.
+This technique models reservations above 85ns accurately, which is sufficient for our experiments.
+
+I choose on-line timing modeling via software instrumentation in lieu of architectural simulations to allow our experiments to execute at full scale and in real time.
+While modeling aspects of NVRAM systems such as cache performance and more precise persist barrier delays require detailed hardware simulation, I believe NVRAM device and memory system design are not sufficiently established to consider this level of detail.
+Instead, I investigate more general trends to determine if and when NVRAM read and write performance warrant storage management redesign.
+
+\textbf{Recovery performance.} Figure~\ref{fig::Recovery} displays recovery latency vs transaction throughput for the TPCB workload, varying page flush rate.
+Page flush rate is controlled by maintaining a constant number of dirty pages in the buffer cache, always flushing the page with the oldest volatile update.
+Experiments run TPCB for one minute (sufficient to reach steady state behavior) and then kill the Shore-MT process.
+Before starting recovery I drop the file system cache.
+Reported recovery time includes only the recovery portion of the Shore-MT process; I do not include system startup time nor non-recovery Shore-MT startup time.
+
+\textbf{Workloads}
+I use three workloads and transactions in our evaluation: TPCC, TPCB, and TATP.
+TPCC models order management for a company providing a product or service \cite{TPCC}.
+TPCB contains one transaction class and models a bank executing transactions across branches, tellers, customers, and accounts \cite{TPCB}.
+TATP includes seven transactions to model a Home Location Registry used by mobile carriers \cite{TATP}.
+Table~\ref{table::Workloads} shows the workload configuration.
+I choose a single updating transaction from each workload and size workloads to fit in a 12GB buffer cache.
+All experiments report throughput as thousands of Transactions Per Second (kTPS).
+Experiments perform ``power runs" -- each thread generates and executes transactions continuously without think time -- and run an optimal number of threads per configuration (between 10 and 12).
+
+\begin{table}
+  \centering
+  \begin{tabular}{l l l l}
+    \hline
+    Workload & Scale factor & Approx. size & Transaction \\
+    \hline \hline
+    TPCC & 70 & 9GB & New order \\
+    TPCB & 1000 & 11GB & TPCB \\
+    TATP & 600 & 10GB & Update location \\
+    \hline
+  \end{tabular}
+  \caption{\textbf{Workloads and transactions.}}
+  \label{table::Workloads}
+\end{table}
+
+\subsection{Proposed Work}
+\label{sec:OLTP_design:Methodology:Proposed}
+
+While I long ago performed validation of our timing model, I intend to include it in the final thesis.
+The results will include a demonstration that the RDTSCP loop allows precise delays in increments of 20ns.
+Additionally, I will demonstrate the bandwidth can be accurately modeled so long as bandwidth reservations are above 85ns.
+The original validation was performed on a multi-socket system, using two processors.
+Since then I decided to restrict our experiments to a single socket due to WAL performance concerns.
+Bandwidth reservations on a single socket will allow for smaller reservations, so the validation needs to be repeated.
+However, the multi-socket validation provides a conservative bound, supporting the correctness of my experiments.
+
+\section{Conclusion}
+\label{sec:OLTP_design:Conclusion}
+This chapter motivated the need to reconsider system design for NVRAM recovery management.
+I highlight possible caching architectures as well as three candidate recovery management software designs and their implementations.
+Further, I provide a methodology for evaluating these systems based on memory trace analysis and read-hardware timing models.
+The next chapter uses this methodology to compare these system designs.
