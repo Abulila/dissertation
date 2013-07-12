@@ -94,3 +94,93 @@ Increased memory read latencies require new consideration for database caching s
 I show that persistently stored data for OLTP can be cached effectively, even with limited cache capacity.
 I expect future NVRAM software to leverage hardware caches, omitting software buffer caches.
 Next, I turn to write performance for storage management on NVRAM devices.
+
+\section{NVRAM Persist Synchronization}
+\label{sec:OLTP_eval:Persists}
+
+Whereas NVRAM reads benefit from caching, persists must always access the device.
+Of particular insterest is the cost of ordering persists via persist barriers.
+Several factors increase persist barrier latency, including ordering persists across distributed/NUMA memory architectures, long latency interconnects (e.g., PCIe-attached storage), and slow NVRAM MLC cell persists.
+I consider the effect of persist barrier latency on transaction processing throughput to determine if and when new NVRAM technologies warrant redesigning recovery management.
+
+Refer to Sections~\ref{section::DesignSpace} and~\ref{section::Methodology} for a more thorough description of our recovery mechanisms and experimental setup.
+All experiments throttle persist bandwidth to 1.5GB/s, which we believe to be conservative (possible with PCIe-attached flash).
+Ideally, NVRAM will provide fast enough accesses to use \InPlace.
+However, one would expect \InPlace's performance to suffer at large persist barrier latencies, requiring either \NVDisk or \GroupCommit to regain throughput.
+
+\subsection{Persist Barrier Latency}
+\label{sec:OLTP_eval:Persists:Performance}
+
+\input{OLTP_eval/Fig.PersistLatencyThroughput.tex}
+
+Figure~\ref{fig::PersistLatencyThroughput} shows transaction throughput as persist barrier latency increases from 0\textmu s to 5\textmu s, the range believed to encompass realistic latencies for possible implementations of persist barriers and storage architectures.
+A persist barrier latency of 0\textmu s (left edge) corresponds to no barrier/DRAM latency.
+For such devices (e.g., battery-backed DRAM), \InPlace far out-paces \NVDisk, providing up to a 50\% throughput improvement.
+The speedup stems from a combination of removing WAL overheads, removing contention between page flushers and transaction threads, and freeing up (a few) threads from log and page flushers to run additional transactions.
+\InPlace also outperforms \GroupCommit, providing an average 10\% throughput improvement across workloads.
+
+As persist barrier latency increases, each recovery mechanism reacts differently.
+\InPlace, as expected, loses throughput.
+\NVDisk and \GroupCommit, on the other hand, are both insensitive to persist barrier latency; their throughputs see only a small decrease as persist barrier latency increases.
+TATP sees the largest throughput decrease for \NVDisk (14\% from 0\textmu s to 5\textmu s).
+The decrease stems from \NVDisk's synchronous commits, requiring the log flusher thread to complete flushing before transactions commit.
+During this time, transaction threads sit idle.
+While both \NVDisk and \GroupCommit retain high throughput, there is a large gap between the two, with \GroupCommit providing up to a 50\% performance improvement over \NVDisk.
+This difference, however, is workload dependent, with WAL imposing a greater bottleneck to TATP than to TPCB or TPCC.
+
+Of particular interest are persist barrier latencies where lines intersect---the break-even points for determining the optimal recovery mechanism.
+Whereas all workloads prefer \InPlace for a 0\textmu s persist barrier latency, \GroupCommit provides better throughput above 1\textmu s persist barrier latency.
+When only considering \InPlace and \NVDisk the decision is less clear.
+Over the range of persist barrier latencies TATP always prefers \InPlace to \NVDisk (the break-even latency is well above 5\textmu s).
+TPCB and TPCC see the two mechanisms intersect near 3.5\textmu s and 2.5\textmu s, respectively, above which \NVDisk provides higher throughput.
+TATP, unlike the other two workloads, only updates a single page per transaction.
+Other overheads tend to dominate transaction time, resulting in a relatively shallow \InPlace curve.
+
+These results suggest different conclusions across storage architectures.
+NVRAM connected via the main memory bus will provide low latency persist barriers (less than 1\textmu s) and prefer \InPlace.
+Other storage architectures, such as distributed storage, require greater delays to synchronize persists.
+For such devices, \GroupCommit offers an alternative to \NVDisk that removes software overheads inherent in WAL while providing recovery.
+However, \GroupCommit increases transaction latency.
+
+\subsection{Transaction Latency}
+\label{sec:OLTP_eval:Persists:XctLatency}
+
+\input{OLTP_eval/Fig.XctLatency.tex}
+
+\GroupCommit improves transaction throughput by placing transactions into batches and committing all transactions in a batch atomically.
+Doing so minimizes and limits the number of inserted persist barriers.
+However, deferring transaction commit increases transaction latency, especially for the earliest transactions in each batch.
+To achieve reasonable throughput, batches must be significantly longer than average transaction latency (such that batch execution time dominates batch quiesce and persist time).
+The batch period acts as a knob for database administrators to trade off transaction latency and throughput.
+I use this knob to measure the relationship between throughput and high-percentile transaction latency.
+
+Figure~\ref{fig::XctLatency} shows throughput, normalized to \InPlace at 0\textmu s persist barrier latency.
+The results consider a 3\textmu s persist barrier latency, where \GroupCommit provides a throughput improvement over other recovery mechanisms.
+The different \GroupCommit points represent different batch periods, and we report the measured 95th percentile transaction latency for all recovery mechanisms.
+I measure transaction latency from the time a transaction begins to the time its batch ends (Shore-MT does not model any pre-transaction queuing time).
+
+The results illustrate that \GroupCommit is capable of providing equivalent throughput to the other recovery mechanisms with reasonable latency increases (no more than 5\texttimes).
+Further, high-percentile transaction latencies fall well below the latency expectations of modern applications.
+TPCC, the highest latency transaction, approaches optimal throughput with a 95th percentile transaction latency of 15ms---similar to latencies incurred by disk-backed databases.
+For latency sensitive workloads, the batch period can be selected to precisely control latency, and \InPlace and \NVDisk remain alternatives.
+
+\subsection{Summary}
+\label{sec:OLTP_eval:Persists:Summary}
+Persist barriers used to enforce persist order pose a new obstacle to providing recoverable storage management with NVRAM.
+I show that, for memory bus-attached NVRAM devices, ensuring recovery using \InPlace is a viable strategy that provides high throughput and removes the overheads of WAL.
+For interconnects and NVRAM technologies that incur larger persist barrier delays, \GroupCommit offers an alternative that yields high throughput and reasonable transaction latency.
+\GroupCommit's batch period allows precise control over transaction latency for latency-critical applications.
+
+\section{Proposed Work}
+\label{sec:OLTP_eval:Proposed}
+
+\section{Conclusion}
+\label{sec:OLTP_eval:Conclusion}
+New NVRAM technologies offer an alternative to disk that provides high performance while maintaining durable transaction semantics, yet existing database software is not optimized for such storage devices.
+In this chapter, I evaluated recovery management to optimize for NVRAM read and persist characteristics.
+I found that on-chip or other hardware caches prove sufficient to minimize NVRAM read stalls.
+I also considered database performance in the presence of persist barrier delays.
+As a drop-in replacement for disk, \NVDisk retains centralized logging overheads.
+\InPlace reduces these overheads, but for large persist barrier latencies suffers from excessive synchronization stalls.
+I proposed a new recovery mechanism, \GroupCommit, to minimize stalls due to persist synchronization while still removing centralized logging.
+While \GroupCommit increases high-percentile transaction latency, latency is controllable and within modern application constraints.
