@@ -1,0 +1,111 @@
+%&latex
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%				TeX Configuration
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%\documentclass[9pt,blockstyle,nonatbib]{sigplanconf}
+%%%%\documentclass[11pt,times,letterpaper]{article}
+%%%
+%%%%\usepackage[top=.75in,left=.75in,right=.75in,bottom=.75in]{geometry}
+%%%
+%%%\usepackage{times} % For times font
+%%%\usepackage{graphics}
+%%%\usepackage[usenames]{color}
+%%%\usepackage{color,graphicx}  % To import color graphics
+%%%\usepackage{latexsym,amssymb,epsf}
+%%%\usepackage{setspace}  % For single/double spacing
+%%%\usepackage{subfigure} % subfigure support
+%%%\usepackage{tabularx} % For tabular in author 
+%%%\usepackage{multirow}
+%%%\usepackage{booktabs}
+%%%\usepackage{paralist} % For tabular in author 
+%%%%\usepackage{titling} % For complicated author list layout
+%%%\usepackage{cite} % To sort citation numbers
+%%%\usepackage[format=hang,indention=-0.5in,margin=10pt,font={small,sf},labelfont=bf]{caption}  %Get figure captions to look sensible
+%%%\usepackage{amsfonts}
+%%%\usepackage{xspace} 
+%%%\usepackage{fancyhdr}
+%%%%\usepackage[numbers,square,sort]{natbib} 
+%%%
+%%%
+%%%%\usepackage{url}
+%%%%\usepackage{epsf}
+%%%%\usepackage{pslatex}
+%%%%\usepackage{amssymb}
+%%%%\usepackage{enumerate}
+%%%%\usepackage{algorithm}
+%%%%\usepackage{colordvi}
+%%%%\usepackage{floatflt}
+
+
+\newcommand{\fix}{ {\bf \textcolor{red}{FIXME} }}
+%\newcommand{\fixme}[1]{\textbf{\textcolor{red}{[ Fixme: #1]}}}
+
+
+\newcommand{\PowerRouting}{Power Routing\xspace}
+
+\newcommand{\MACClong}{Scientific Computing Data Center}
+\newcommand{\MACC}{SCDC}
+
+\newcommand{\field}[1]{\mathbb{#1}}
+
+
+\newenvironment{packed_itemize}{
+\begin{itemize}
+  \setlength{\topsep}{0pt}
+  \setlength{\partopsep}{0pt}
+  \setlength{\itemsep}{0pt}
+  \setlength{\parskip}{0pt}
+  \setlength{\parsep}{0pt}
+}{\end{itemize}}
+%%%
+%%%\widowpenalty=10000
+%%%\clubpenalty=10000
+%%%\raggedbottom
+%%%
+%%%% Shrink bib font 
+%%%\def \bibfont {\normalsize}
+%%%
+%%%%\pagenumbering{arabic}
+
+% authors for Appendix
+{
+\centering
+Steven Pelley, David Meisner, Pooya Zandevakili, \\
+Thomas F. Wenisch, and Jack Underwood \\
+\vspace{2\baselineskip}
+}
+
+%	Abstract
+\input{Appendices/PowerRouting/abstract.tex}
+
+%	Introduction
+\input{Appendices/PowerRouting/intro.tex}
+
+% Background
+\input{Appendices/PowerRouting/background.tex}
+
+% Design
+\input{Appendices/PowerRouting/design.tex}
+
+% Scheduling
+\input{Appendices/PowerRouting/scheduling.tex}
+
+% Evaluation
+\input{Appendices/PowerRouting/evaluation.tex} 
+
+% Conclusion
+\input{Appendices/PowerRouting/conclusion.tex}
+
+% Acknowledgements
+\input{Appendices/PowerRouting/ack.tex}
+
+
+%%%\begin{spacing}{1.0}
+%%%\bibliographystyle{IEEEtranS}
+%%%\bibliography{abbrev,PowerRouting}
+%%%\end{spacing}
+%%%
+%%%
+%%%\end{document}

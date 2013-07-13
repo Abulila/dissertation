@@ -1,0 +1,71 @@
+\section{Scheduling}
+\label{section::scheduling}
+
+\PowerRouting relies on a centralized scheduling algorithm to assign power to servers. Each time a server requests additional power (as a result of exhausting its power cap) the scheduler checks if the server's current active power feed has any remaining capacity, granting it if possible. If no slack exists, the scheduler attempts to create a new allocation schedule for the entire facility that will eliminate or minimize the need for capping. In addition to considering the actual desired power budget of each server, the scheduler must also provision sufficient reserve capacity on each feed such that the feed can sustain its share of load if any PDU fails.  Finally, we constrain the scheduler to allow only phase-balanced assignments where the load on the three phases of any PDU differ by no more than 20\% of the per-phase capacity.
+
+The scheduling process comprises three steps: gathering the desired budget for each server, solving for an assignment of servers to their primary or secondary feeds, and then, if necessary, reducing server's budgets to meet the capacity constraints on each feed.
+
+Whereas sophisticated methods for predicting power budgets are possible \cite{Choi08}, we use a simple policy of assigning each server a budget based on its average power demand in the preceding minute.  More sophisticated mechanisms are orthogonal to the scheduling problem itself.
+
+Solving the power feed assignment problem optimally, even without redundancy, is an NP-Complete problem.  It is easy to see that power scheduling $\in$ NP; a nondeterministic algorithm can enumerate a set of assignments from servers to PDUs and then check in polynomial time that each PDU is within its power bounds.  To show that power scheduling is NP-Complete we transform PARTITION to it \cite{GareyBook}.  For a given instance of PARTITION of finite set $A$ and a size $s(a) \in \field{Z+}$ for each $a \in A$: we would like to determine if there is a subset $A' \in A$ such that the $\sum_{a \in A'}{s(a)} = \sum_{a \in A-A'}{s(a)}$. Consider $A$ as the set of servers, with $s(a)$ corresponding to server power draw. Additionally consider two PDUs each of power capacity $\sum_{a} s(a) / 2$. These two problems are equivalent. Thus, a polynomial time solution to power scheduling will yield a polynomial time solution to PARTITION (implying power scheduling is NP-Complete).
+
+In data centers of even modest size, brute force search for an optimal power feed assignment is infeasible.  Hence, we resort to a heuristic approach to generate an approximate solution.  
+
+We first optimally solve a power feed assignment problem allowing servers to be assigned fractionally across feeds using linear programming.  This linear program can be solved in polynomial time using standard methods \cite{CormenBook}. From the exact fractional solution, we then construct an approximate solution to the original problem (where entire servers must be assigned a power feed).  Finally, we check if the resulting assignments are below the capacity of each power feed.  If any feed's capacity is violated, we invoke a second optimization step to choose power caps for all servers.  
+
+Determining optimal caps is non-trivial because of the interaction between a server's power allocation on its primary feed, and the reserve capacity that allocation implies on its secondary feed.  We employ a second linear programming step to determine a capping strategy that maximizes the amount of power allocated to servers (as opposed to reserve capacity).
+
+{\bf Problem formulation.} We formulate the linear program based on the power distribution topology (i.e., the static assignment of primary and secondary feeds to each server), the desired server power budgets, and the power feed capacities.  For each pair of power feeds we calculate $Power_{i,j}$, the sum of power draws for all servers connected to feeds $i$ and $j$. (Our algorithm operates at the granularity of individual phases of AC power from each PDU, as each phase has limited ampacity). $Power_{i,j}$ is 0 if no server shares feeds  $i$ and $j$ (e.g., if the two feeds are different phases from the same PDU or no server shares those PDUs).  Next, for each pair of feeds, we define variables $Feed_{i,j}i$ and $Feed_{i,j}j$ to account for the server power from $Power_{i,j}$ routed to feeds $i$ and $j$, respectively.  Finally, a single global variable, $Slack$, represents the maximum unallocated power on any phase after all assignments are made.  
+With these definitions, the linear program maximizes $Slack$ subject to the following constraints:
+
+$\forall i, j \neq i$, $i$ and $j$ are any phases on different PDUs:
+
+\vspace{-.2 in}
+\begin{equation}\label{rationalbin}
+Feed_{i,j}i + Feed_{i,j}j = Power_{i,j}
+\end{equation}
+
+\vspace{-.25 in}
+\begin{equation}\label{pducapacity}
+\displaystyle\sum_{k \neq i} Feed_{i,k}i + \displaystyle\sum_{l in j's PDU} Feed_{i,l}l + Slack \le Capacity(i) 
+\end{equation}
+\vspace{-.15 in}
+
+And constraints for distinct phases $i$ and $j$ within a single PDU:
+
+\vspace{-.2 in}
+\begin{equation}\label{phasebalance}
+|\displaystyle\sum_{k \neq i} Feed_{i,k}i - \displaystyle\sum_{k \neq j} Feed_{j,k}j| \le .2 \times Capacity(i,j)
+\end{equation}
+\vspace{-.15 in}
+
+With the following bounds:
+
+\vspace{-.2 in}
+\begin{equation}\label{freeslack}
+-\infty \le Slack \le \infty
+\end{equation}
+\vspace{-.15 in}
+
+\vspace{-.25 in}
+\begin{equation}\label{positivefeeds}
+\forall i, j \ne i : Feed_{i,j}i, Feed_{i,j}j \ge 0
+\end{equation}
+\vspace{-.15 in}
+
+Equation \ref{rationalbin} ensures that power from servers connected to feeds $i$ and $j$ is assigned to one of those two feeds.
+Equation \ref{pducapacity} restricts the sum of all power assigned to a particular feed $i$, plus the reserve capacity required on $i$ should feeds on  $j$'s PDU fail, plus the excess slack to be less than the capacity of feed $i$. Finally, equation \ref{phasebalance} ensures that phases are balanced across each PDU. A negative $Slack$ indicates that more power is requested by servers than is available (implying that there is no solution to the original, discrete scheduling problem without power capping).
+
+We use the fractional power assignments from the linear program to schedule servers to feeds.
+For a given set of servers, $s$, connected to both feed $i$ and feed $j$, the fractional solution will indicate that $Feed_{i,j}i$ watts be assigned to $i$ and $Feed_{i,j}j$ to $j$.  The scheduler must create a discrete assignment of servers to feeds to approximate the desired fractional assignments as closely as possible, which is itself a bin packing problem.  To solve this sub-problem efficiently, the scheduler sorts the set $s$ descending by power and repeatedly assign the largest unassigned server to $i$ or $j$, whichever has had less power assigned to it thus far (or whichever has had less power relative to its capacity if the capacities differ).
+
+If a server cannot be assigned to either feed without violating the feed's capacity constraint, then throttling may be necessary to achieve a valid schedule.  The server is marked as ``pending" and left temporarily unassigned. By the nature of the fractional solution, at most one server in the set can remain pending.  This server must eventually be assigned to one of the two feeds; the difference between this discrete assignment and the optimal fractional assignment is the source of error in our heuristic. By assigning the largest servers first we attempt to minimize this error. Pending servers will be assigned to the feed with the most remaining capacity once all other servers have been assigned.
+
+The above optimization algorithm assumes that each pair of power feeds shares several servers in common, and that the power drawn by each server is much less than the capacity of the feed.
+We believe that plausible power distribution topologies fit this restriction.
+
+Following server assignment, if no feed capacity constraints have been violated, the solution is complete and all servers are assigned caps at their requested budgets.  If any slack remains on a feed, it can be granted upon a future request without re-invoking the scheduling mechanism, avoiding unnecessary switching. 
+
+If any capacity constraints have been violated, a new linear programming problem is formulated to select power caps that maximize the amount of power allocated to servers (as opposed to reserve capacity for fail-over).  We scale back each feed such that no PDU supplies more power than its capacity, even in the event that another PDU fails.  The objective function maximizes the sum of the server budgets.  We assume that servers can be throttled to any frequency from idle to peak utilization and that the relationship and limits of frequency and power scaling are known a priori.
+Note, however, that this formulation ignores heterogeneity in power efficiency, performance, or priority across servers; it considers only the redundancy and topology constraints of the power distribution network.  An analysis of more sophisticated mechanisms for choosing how to cap servers that factors in these considerations is outside the scope of this paper.
+
