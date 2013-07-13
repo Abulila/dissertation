@@ -149,7 +149,10 @@ Once the batch manager is certain all threads have accessed this memory it acces
 The batch manager is then free to invalidate the log, committing the batch.
 The use of persist barriers ensures that all store data persists before the batch commits, but during batch execution false cross-thread persist dependences do not limit execution.
 
-LPO potentially improves performance by minimizing the critical path of persist dependencies.
+\input{PMC/Fig.LPO.tex}
+LPO potentially improves performance by minimizing the critical path of persist dependencies, shown in Figure~\fixme{ref}
+Data sharing and the resulting cross-thread persist dependencies increase the critical path of persists.
+Even with buffering and high performance NVRAM memory systems that allow persists to buffer while thread continue, such chains may limit throughput by filling buffers, or increase delays caused by syncs while the buffers flush in dependence order.
 Since threads persist independently (except where persist barriers are placed), adding more threads provides more persist throughput, similarly to Symmetric Multi Threading (SMT) provides memory parallelism on existing systems.
 However, the need to perform all persists in serial \emph{within} a thread remains a concern.
 
@@ -173,7 +176,11 @@ Epoch barriers are required on both threads to order thread 2's persist after th
 Cross-thread persists are only ordered at epoch boundaries; memory sharing does not enforce an order within the epoch of the shared memory instructions.
 Additionally, the underlying consistency model must be observed to enforce proper multi-threaded behavior -- TEO relies on the \emph{consistency model} to enforce persist order.
 
-TEO accelerates persists by decreasing persist critical path within threads, producing a sequential chain of dependencies.
+\input{PMC/Fig.persist_wal.tex}
+
+TEO accelerates persists by decreasing persist critical path within threads, producing a sequential chain of dependencies, shown in Figure~\fixme{ref}.
+With PSC/LPO all atomically persistable regions (usually 8 bytes) must persist in serial.
+TEO relaxes this constraint, with the help of barriers, to persist log entry bodies in parallel, reducing persist critical path.
 Cross-thread persist dependencies are relatively easy; no additional persist barrier is required.
 This model is closest to existing work \fixme{cite BPFS}, which I discuss next.
 
