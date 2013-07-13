@@ -1,0 +1,6 @@
+\begin{figure}
+\centering
+\includegraphics[width=\textwidth]{PMC_patterns/buffer_TEO_LPO.pdf}
+\caption{Buffer execution under LPO and TEO.  LPO (top) removes persist dependencies between persisting the counter value and subsequent buffer persists.  Such dependencies still remain when adjacent buffer inserts are from the same thread.  Atomic persist segments within each buffer persist serialize.  TEO (bottom) allows buffer data to persist in parallel.  Buffer data necessarily persists before counter data for correctness, but counter values additionally persist before subsequent buffer persists, even from remote threads.}
+\label{figure::buffer_TEO_LPO}
+\end{figure}
