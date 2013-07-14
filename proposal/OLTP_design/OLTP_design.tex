@@ -153,8 +153,8 @@ However, it assumes IO delays to be the dominant performance bottleneck and trad
 As persist barrier latency increases performance suffers, such that \NVDisk eventually performs better.
 Here, I provide a third option, coupling \NVDisk's persist barrier latency-insensitivity with \InPlace's low software overhead: \GroupCommit.
 
-\subsection{Description}
-\label{sec::OLTP_design:GroupCommit:Proposed}
+\subsection{Operating Principles and Implementation}
+\label{sec:OLTP_design:GroupCommit:Proposed}
 
 \GroupCommit operates by executing transactions in batches, whereby all transactions in the batch commit or (on failure) all transactions abort.
 Transactions quiesce between batches, allowing only transactions from the oldest batch to execute.

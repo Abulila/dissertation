@@ -147,7 +147,7 @@
 \listoftables        % Required if there is more than one table
 %\listofmaps          % Required if there is more than one map
 \listofappendices    % Required if there is more than one appendix
-\listofabbreviations % Optional. Abbreviations should be stored in a file named abbr.tex
+%\listofabbreviations % Optional. Abbreviations should be stored in a file named abbr.tex
 
 % Optional in-dissertation Abstract Page
 \startabstractpage
@@ -191,14 +191,14 @@
  \input{PMC_patterns/PMC_patterns}
 
 \startappendices
- \appendix{Power Routing: Dynamic Power Provisioning in the Data Center}
- \label{app:PowerRouting}
- \input{Appendices/PowerRouting/PowerRouting.tex}
-
  \appendix{Understanding and Abstracting Total Data Center Power}
  \label{app:WEED}
  \input{Appendices/WEED/weed09.tex}
  
+ \appendix{Power Routing: Dynamic Power Provisioning in the Data Center}
+ \label{app:PowerRouting}
+ \input{Appendices/PowerRouting/PowerRouting.tex}
+
 \startbibliography
  \begin{singlespace} % Bibliography must be single spaced
   \bibliography{References}   % Use the BibTeX file ``References.bib''.

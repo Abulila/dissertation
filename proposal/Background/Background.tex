@@ -38,7 +38,7 @@ Though dense, the layout sacrifices byte addressability and some read latency---
 
 One of the difficulties of Flash devices is that a cell can be more easily programmed (by adding electrons to the floating gate) than erased (removing these electrons).  
 Erase operations require both greater energy and latency, and typically can be applied only at coarse granularity (e.g., over blocks of 128KB to 512KB).
-Moreover, repeated erase operations cause the Flash cell to wear out over time, limiting the maximum lifetime of the cell (e.g., to $10^5$ to $10^6$ writes \fixme{Roberts2009}).  
+Moreover, repeated erase operations cause the Flash cell to wear out over time, limiting the maximum lifetime of the cell (e.g., to $10^5$ to $10^6$ writes \cite{Roberts2009}).  
 Recent Flash devices further increase storage density by using several distinct charge values to represent multiple bits in a single cell at the cost of slower accesses and even shorter lifetimes.
 
 A Flash-based SSD wraps an array of underlying Flash memory chips with a controller that manages capacity allocation, mapping, and wear leveling across the individual Flash devices.  
@@ -119,7 +119,7 @@ Then, the pages identified in the temporary table are fetched in order, and rele
 The rowid-sort scan has the advantage that each data page will be fetched from disk only once, even if multiple relevant tuples are located on the page. 
 This operation exists under several names.
 My description here fits the query plan explanation provided by IBM's DB2.
-Other databases use different terminology or algorithms to ensure that each store page is fetched exactly once (for example, PostgreSQL uses a bitmap index, sorting the list of pages with tuples that satisfy the query \fixme{cite Postgres?}).
+Other databases use different terminology or algorithms to ensure that each store page is fetched exactly once (for example, PostgreSQL uses a bitmap index, sorting the list of pages with tuples that satisfy the query \cite{PostgresLossyBitMap}).
 Rowid-sort scan is the optimal access path for intermediate selectivities.
 
 \subsection{Joins}
@@ -138,7 +138,7 @@ Seek and random/sequential transfer times are central parameters of this model, 
 
 As accessing large amounts of data on disk can take long periods of time, it is imperative that the query optimizer choose the best query plan.
 Typical query optimizers use data statistics to approximate query selectivity and cardinality as well as physically-based models to estimate the runtime of candidate query plans.
-Section~\fixme{section} will investigate when the query plan changes between disk and flash, and what performance is lost when the incorrect decision is made (i.e., when optimizing for disk but actually using flash).
+Sections~\ref{sec:FlashOpti:Scans} and~\ref{sec:FlashOpti:Joins} will investigate when the query plan changes between disk and flash, and what performance is lost when the incorrect decision is made (i.e., when optimizing for disk but actually using flash).
 
 \section{Durable and Recoverable Transactions}
 \label{sec:Background:Recovery}

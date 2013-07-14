@@ -3,12 +3,12 @@ Flash memory, made popular by mobile devices, provides block access with low lat
 Additionally, new nonvolatile memories (NVRAM) are expected in upcoming years, presenting DRAM-like performance alongside persistent storage.
 Wheres both technologies accelerate data access due to their raw speed, used merely as a disk replacement they may fail to achieve their full potentials.
 Flash's asymmetric read/write access (i.e., reads execute faster than writes) opens new opportunities to optimize flash-specific access.
-Similarly, NVRAM's new persistent interface raises challenges to designing high performance failure-resistant transaction processing.
+Similarly, NVRAM's new persistent interface allows new desings for high performance failure-resistant transaction processing.
 
 This thesis addresses software and hardware system design for new and upcoming storage technologies.
 First, I investigate analytics query optimization for flash, expecting flash's fast random access to require new query planning.
-While flash allows some queries to benefit from new query optimization, the range of queries affected and relative performance increase is negligible.
+While flash allows some queries to benefit from alternative query optimization, the range of queries affected and relative performance increase is negligible.
 Second, I examine new opportunities for durable, recoverable transaction processing with new NVRAM storage.
 Existing disk-based recovery mechanisms impose large software overheads, yet updating data in-place requires frequent device synchronization that limits throughput.
-Subsequently, I introduce a new design, NVRAM Group Commit, to amortize synchronization delays over many transactions, increasing throughput at some cost to transaction latency.
-Finally, I propose to research hardware designs and programmer interfaces to provide high performance recoverable data structures with NVRAM, extending memory consistency with persistent semantics to introduce \emph{memory persistency}.
+Subsequently, I introduce a new design, \GroupCommit, to amortize synchronization delays over many transactions, increasing throughput at some cost to transaction latency.
+Finally, I propose to research hardware designs and programmer interfaces to provide high performance recoverable data structures with NVRAM, extending memory consistency with persistent semantics to introduce \emph{Persistent Memory Consistency}.

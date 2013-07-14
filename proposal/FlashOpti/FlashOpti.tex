@@ -1,5 +1,5 @@
 This chapter attempts to determine if database query optimizers must be SSD-aware.
-The work was originally published in the Second International Workshop on Accelerating Data Management Systems Using Modern Processor and Storage Architectures (AMDS 2011), collocated with VLDB \fixme{cite}.
+The work was originally published in the Second International Workshop on Accelerating Data Management Systems Using Modern Processor and Storage Architectures (AMDS 2011), collocated with VLDB \cite{PelleyWenisch11}.
 I worked on this project with my advisor, Thomas F. Wenisch, and assistant professor Kristen LeFevre.
 Working under their advisement, I was the sole graduate student and technical contributor (database and programming effort).
 Refer to Sections~\ref{sec:Background:Storage} and~\ref{sec:Background:Analytics} for necessary background on this topic.
@@ -56,7 +56,7 @@ Experiments use the Wisconsin Benchmark schema \cite{Bitton83benchmarkingdatabas
 Though this benchmark does not represent a particular real-world application, modeling a full application is not our intent.
 Rather, the Wisconsin Benchmark's uniformly distributed fields allows us to control precisely the selectivity of each query.
 Whereas real world queries are more complicated than the simple scans and joins we study, these simple microbenchmarks reveal the underlying differences between the storage devices and scan/join algorithms most clearly.
-Alternative ``real world" benchmarks (namely TPC-H \fixme{cite}) complicate matters, making it difficult to discern why different query plans prefer disk or SSD.
+Alternative ``real world" benchmarks (namely TPC-H \cite{TPCH}) complicate matters, making it difficult to discern why different query plans prefer disk or SSD.
 I aggregate results of all queries to avoid materializing output tables as I am primarily interested in isolating other database operations; typically all results must be aggregated regardless of device, so we remove this step to provide a better comparison.
 I run queries on a Pentium Core Duo with 2GB main memory, a 7200 RPM root disk drive, and the conventional and SSD database disks described in Table \ref{table::DiskCharacteristics}.
 Both the hard disk and SSD were new at the beginning of the experiments.
