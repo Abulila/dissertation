@@ -101,9 +101,41 @@ Whereas volatile memory systems control this solely by controlling the order in 
 Achieving a globally consistent persist order requires that persists \emph{actually} occur in-order from each thread, or that sequential batches of persists occur atomically, so that no failure may observe an intermediate state (NVRAM's atomically persistable size is likely to be small -- 8 bytes usually assumed).
 Additionally, all data sharing propagates ordering dependencies between persists.
 
-Consider Figure~\fixme{ref}.
+{
+\singlespacing
+\newsavebox{\PSCThreadOne}
+\begin{lrbox}{\PSCThreadOne}
+  \begin{lstlisting}
+Thread 1:
+
+A = 1
+C = B
+  \end{lstlisting}
+\end{lrbox}
+
+\newsavebox{\PSCThreadTwo}
+\begin{lrbox}{\PSCThreadTwo}
+  \begin{lstlisting}
+Thread 2:
+
+B = 1
+D = A
+  \end{lstlisting}
+\end{lrbox}
+
+\begin{figure}[]
+\centering
+\subfigure{ \usebox{\PSCThreadOne} }
+\hspace{1 in}
+\subfigure{ \usebox{\PSCThreadTwo} }
+\caption{\textbf{Persistent Sequential Consistency (PSC).} All variables in NVRAM and initialized to 0.  PSC prevents states \{A=0, D=1\} and \{B=0, C=1\}.}
+\label{fig:PSC}
+\end{figure}
+}
+
+Consider Figure~\ref{fig:PSC}.
 The letters correspond to persistent variables, and all are initialized to 0.
-Assuming threads execute under a sequential consistency model (i.e., they observe shared values from that model) and persist orders are enforced according to the PSC model, at no point may we observe that A=1, C=1, and B=0.
+Assuming threads execute under a sequential consistency model (i.e., they observe shared values from that model) and persist orders are enforced according to the PSC model, at no point may we observe that B=0 and C=1.
 Doing so would violate the model by allowing thread 1 to observe a persist from thread 2 (B=1) and then persist an additional value before B persists.
 Even if the program executes according to SC, persistence order must also be observed.
 
@@ -133,7 +165,7 @@ I relax cross-thread dependences in a model called \emph{Local Persist Order} (L
 All persists within a thread continue to execute in-order, as in sequential consistency.
 The persistent state at any point in time represents correct execution according to the underlying consistency model (which can be SC, TSO, etc.).
 However, each thread may have progressed persistent state to various degrees in ways that may violate PSC.
-For example, again considering Figure~\fixme{ref}.
+For example, again considering Figure~\ref{fig:PSC}.
 It is now possible to observe A=1, C=1, but B=0.
 This would occur if \emph{consistency execution} observed thread 2 executing entirely before thread 1, but thread 1 persisting entirely before thread 2 (which is allowed according to the LPO).
 
@@ -156,41 +188,12 @@ Even with buffering and high performance NVRAM memory systems that allow persist
 Since threads persist independently (except where persist barriers are placed), adding more threads provides more persist throughput, similarly to Symmetric Multi Threading (SMT) provides memory parallelism on existing systems.
 However, the need to perform all persists in serial \emph{within} a thread remains a concern.
 
-\subsection{Total Epoch Order}
-\label{sec:PMC:PersistenceModels:TEO}
-
-The third and final model enforces persist order across threads, but relaxes persist order within threads.
-Consider the log in Chapters~\fixme{ref} and~\fixme{ref}, demonstrated in \texttt{persist\_wal} (only a single entry, for now).
-Persisting this entry requires first persisting the entry's body, followed by the tail LSN.
-Most log entries are large (at least 100 bytes), containing information about the transaction, store, page, tuple, and action taken.
-According to PSC and LPO all persists to the log entry body must occur in order -- an unnecessary constraint that increases persist critical path.
-Instead, we would like to allow the entire log entry body to persist at once, and enforce that the body persists before the LSN using a persist barrier.
-
-We allow this in \emph{Total Epoch Order} (TEO).
-TEO allows persists within a thread to occur in any order, relying on epoch barriers, borrowed from \fixme{ref} to order persists into \emph{epochs}.
-Unlike LPO, shared memory accesses enforce persist order across threads.
-However, epochs, not individual persists, are ordered between threads.
-Enforcing persist order between threads requires the first thread to persist, insert an epoch barrier, and write to shared memory.
-The second thread reads the shared memory, inserts an epoch barrier, and then persists.
-Epoch barriers are required on both threads to order thread 2's persist after thread 1's.
-Cross-thread persists are only ordered at epoch boundaries; memory sharing does not enforce an order within the epoch of the shared memory instructions.
-Rather, The epochs of each thread where memory sharing occurs are considered \emph{concurrent}, and like the epoch of a single thread, persists may occur in any order.
-Additionally, the underlying consistency model must be observed to enforce proper multi-threaded behavior -- TEO relies on the \emph{consistency model} to enforce persist order.
-
-\input{PMC/Fig.persist_wal.tex}
-
-TEO accelerates persists by decreasing persist critical path within threads, producing a sequential chain of dependencies, shown in Figure~\fixme{ref}.
-With PSC/LPO all atomically persistable regions (usually 8 bytes) must persist in serial.
-TEO relaxes this constraint, with the help of barriers, to persist log entry bodies in parallel, reducing persist critical path.
-Cross-thread persist dependencies are relatively easy; no additional persist barrier is required.
-This model is closest to existing work \fixme{cite BPFS}, which I discuss next.
-
 \subsection{Byte Addressable Persistent File System}
 \label{sec:PMC:PersistenceModels:BPFS}
 
 The Byte Addressable Persistent File System (BPFS) \fixme{cite} is the de-facto standard for existing persistent memory consistency models, used additionally by \fixme{cite NVHeaps, IBM's logging, others?}.
-Threads persist by writing to the persistent address space, enforcing persist order via epoch barriers.
-BPFS additionally provides an example implementation, enforcing persist order with only cache modifications (little additionally buffering or modifications to the memory system).
+Threads persist by writing to the persistent address space, enforcing persist order via \emph{epoch barriers}, producing \emph{epochs}.
+BPFS additionally provides an implementation, enforcing persist order with only cache modifications (little additionally buffering or modifications to the memory system).
 A table of epochs is kept in the cache of each core, with each cache line keeping track of its persist epoch number.
 The cache writes back in the background, making sure that each epoch persists completely before starting to write back the next epoch.
 
@@ -199,11 +202,55 @@ If at any point a thread overwrites a cache line from a previous persist epoch (
 Further, if a thread reads a cache line from a previous persist epoch produced by a remote thread, it again stalls until the previous persist epoch completes persisting (it does not stall if the reading thread is the same as the producing thread).
 Single threaded applications may persist data within epochs in parallel, and enforce correct cross-thread persist order (at the cost of stalls).
 
-Aside from the performance implications of stalling, BPFS has several problems.
-Specifically, there is no discussion of the memory consistency model, which produces \emph{correctness} problems.
+\input{PMC/Fig.persist_wal.tex}
+
+Consider the log in Chapters~\fixme{ref} and~\fixme{ref}, demonstrated in \texttt{persist\_wal} (\fixme{refer back}) and shown here in Figure~\fixme{ref}.
+Persisting a single entry requires first persisting the entry's body, followed by the tail LSN.
+Most log entries are large (at least 100 bytes), containing information about the transaction, store, page, tuple, and action taken.
+According to PSC and LPO all persists (8 byte segments) to the log entry body must occur in order -- an unnecessary constraint that increases persist critical path.
+Instead, BPFS allows the entire log entry body to persist at once, and enforces that the body persists before the LSN using a persist barrier.
+
+In consistency terms BPFS attempts to produce a total ordering of epochs that all threads observe (Total Epoch Order -- TEO -- would be a great name for this model).
+However, attempting to do so produces problems, both of correctness and interfering with useful programming patterns.
 I will demonstrate here that the implementation as described is susceptible to deadlock.
 
-Consider Figure~\ref{fixme}.
+{
+\singlespacing
+\newsavebox{\ThreadOne}
+\begin{lrbox}{\ThreadOne}
+  \begin{lstlisting}
+Thread 1:
+
+persist_bar
+A = 1
+B = 1
+persist_bar
+  \end{lstlisting}
+\end{lrbox}
+
+\newsavebox{\ThreadTwo}
+\begin{lrbox}{\ThreadTwo}
+  \begin{lstlisting}
+Thread 2:
+
+persist_bar
+B = 2
+A = 2
+persist_bar
+  \end{lstlisting}
+\end{lrbox}
+
+\begin{figure}[]
+\centering
+\subfigure{ \usebox{\ThreadOne} }
+\hspace{1 in}
+\subfigure{ \usebox{\ThreadTwo} }
+\caption{\textbf{BPFS deadlock.} BPFS attempts to produce a total order on epochs.  Races within epochs create a cyclic order-dependence, resulting in deadlock.}
+\label{fig:BPFS_deadlock}
+\end{figure}
+}
+
+Consider Figure~\ref{fig:BPFS_deadlock}.
 Each thread runs a single epoch with two persists to shared memory.
 The second thread executes these persists in opposite order of the first.
 If thread 1 writes to A at the same time thread 2 writes to B a deadlock will occur.
@@ -211,14 +258,89 @@ Thread 1 attempts to write to B, fetching the cache line for B, realizing that t
 Similarly, thread 2 attempts to write to A, ordering its epoch after thread 1's; a cycle has occurred, preventing forward progress.
 
 This problem may occur even without data races or a total order on writes.
-Imagine that A and B on each thread are different address, each protected by locks, but that thread 1's A (B) is on the same \emph{cache line} as thread 2's A (B).
-Such \emph{false sharing} may produce performance problems for existing cache systems, but in the case of BPFS produces deadlock.
+Imagine that A and B on each thread are different variables, each protected by locks, but that thread 1's A (B) is on the same \emph{cache line} as thread 2's A (B).
+Such \emph{false sharing} may produce performance problems in existing volatile cache systems, but in the case of BPFS produces deadlock.
 Furthermore, one might try to solve this problem by reordering thread 2's writes so that both thread 1 and thread 2 write in the same order, totally ordering the epochs (whoever accesses A first runs to completion while the other stalls).
-However, relaxed consistency models may allow the processor (or compiler) to reorder writes and persists, arriving at the original problem.
+However, relaxed consistency models may allow the processor (or compiler) to reorder writes and persists within an epoch, arriving at the original problem.
+In fact, it is not clear if instructions accessing only volatile data are permitted to reorder across epoch boundaries.
 
-I believe that the solution is to properly define the interaction between persistence and the consistency model.
-BPFS gets into trouble because it assumes transaction-like persistence semantics without any rollback mechanism -- persistence and concurrency control are too tightly coupled without proper support.
-My TEO is strongly influenced by BPFS but allows concurrent, conflicting epochs to make forward progress with either undefined behavior or behavior defined by the underlying consistency and persistent consistency models.
+Finally, certain data structures may specifically intend to allow races within epochs.
+\GroupCommit, for example, requires threads to work concurrently towards a persistent state.
+Establishing a total epoch order introduces unnecessary persist-order dependencies.
+
+BPFS attempts to produce a total order on all epoch barriers, producing deadlocks and preventing useful programming patterns.
+I believe that the solution is to better define the interaction between persistence and the consistency model.
+I next introduce a model strongly influenced by BPFS but that allows concurrent epochs to make forward progress at the cost of a slightly less intuitive interface.
+
+\subsection{Partial Epoch Order}
+\label{sec:PMC:PersistenceModels:PEO}
+
+The third and final model relaxes persist order within a thread similarly to BPFS, but produces only a partial order of epochs between threads.
+Partial Epoch Order (PEO) considers the epochs of two threads that contain a memory dependence to be \emph{concurrent}, and thus not ordered.
+However, earlier and later epochs from those threads \emph{do} carry the dependence, allowing ordering of persists between threads.
+
+{
+\singlespacing
+\newsavebox{\PEOThreadOne}
+\begin{lrbox}{\PEOThreadOne}
+  \begin{lstlisting}
+Thread 1:
+
+persist_bar (i)
+persist A
+
+persist_bar (ii)
+persist X
+write C
+
+persist_bar (iii)
+persist D
+  \end{lstlisting}
+\end{lrbox}
+
+\newsavebox{\PEOThreadTwo}
+\begin{lrbox}{\PEOThreadTwo}
+  \begin{lstlisting}
+Thread 1:
+
+persist_bar (i)
+persist B
+
+persist_bar (ii)
+read C
+persist Y
+
+persist_bar (iii)
+persist E
+  \end{lstlisting}
+\end{lrbox}
+
+\begin{figure}[]
+\centering
+\subfigure{ \usebox{\PEOThreadOne} }
+\hspace{1 in}
+\subfigure{ \usebox{\PEOThreadTwo} }
+\caption{\textbf{Partial Epoch Order (PEO).} PEO considers epochs in different threads containing a memory dependence to be concurrent.  This memory dependence does not enforce a persist order between the threads' epochs, but enforces this order on earlier and later epochs.  E must persist after A.}
+\label{fig:PEO}
+\end{figure}
+}
+
+Figure~\ref{fig:PEO} provides an example.
+Two threads persist data and communicate, each with three epochs.
+Communication occurs in epoch (ii) of each thread -- thread 1 writes to (volatile) address C, which thread 2 reads.
+According to PEO, epochs (ii) of each thread are concurrent and do not enforce a persist order.
+Thus, thread 1's persist to X may not necessarily occur before thread 2's persist to Y.
+However, epochs of thread 1 prior to (ii) must necessarily persist before epochs of thread 2 after (ii).
+Thread 2's persist to A must persist before thread 2's persist to E.
+The converse is not true -- thread 2's persist to B need not persist before thread 1's persist to D.
+This model produces a single partial ordering of persist epochs that all threads observe.
+
+It is unclear to me if volatile and non-memory instructions should be allowed to reorder with persist epoch barriers.
+This will depend on the actual implementation, and if the hardware is able to easily distinguish persists from nonvolatile writes.
+For example, thread 2's read to C in the previous example should be allowed to occur before the persist to B so long as the correct persist order is enforced.
+
+PEO provides effective single-thread persist parallelism while providing a relatively intuitive model for cross-thread persist-order dependencies.
+While not as intuitive as BPFS (total epoch order), PEO prevents deadlock and allows concurrent access to shared persistent memory spaces without enforcing a persist order.
 
 \section{Conclusion}
 \label{sec:PMC:Conclusion}

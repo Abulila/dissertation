@@ -43,7 +43,7 @@ However, I do not consider actual implementations.
 \label{sec:PMC_patterns:Buffer}
 
 \input{PMC_patterns/Fig.buffer.tex}
-\input{PMC_patterns/Fig.buffer_TEO_LPO.tex}
+\input{PMC_patterns/Fig.buffer_PEO_LPO.tex}
 \input{PMC_patterns/Fig.buffer_relaxed_elision.tex}
 
 I first discuss a persistent buffer, used as an OLTP database centralized log in \fixme{cite}.
@@ -76,20 +76,20 @@ If every log entry is inserted by a separate thread, LPO results in a persist cr
 However, log entries within a single thread must persist in-order, limiting the throughput of each individual thread.
 LPO is easy to program, as all persists within a thread occur-in order, and provides high throughput given sufficient buffering and a large number of threads to yield persist parallelism.
 
-\textbf{TEO.} The bottom of Figure~\fixme{ref} displays buffer execution for TEO -- total epoch order.
-Total epoch order allows single-thread persists to occur in parallel by placing them in epochs.
+\textbf{PEO.} The bottom of Figure~\fixme{ref} displays buffer execution for PEO -- partial epoch order.
+Partial epoch order allows single-thread persists to occur in parallel by placing them in epochs.
 Epochs across threads are ordered (or considered concurrent) according to the consistency model and memory sharing.
-By using epochs, TEO allows buffer data to persist in parallel, but still orders buffer persists with counter persists, and counter persists to subsequent buffer persists.
+By using epochs, PEO allows buffer data to persist in parallel, but still orders buffer persists with counter persists, and counter persists to subsequent buffer persists.
 The persist critical path forms a chain of two persist epochs per insert.
 Using our earlier assumptions, this buffer will allow inserts every 200ns on average.
 While getting closer to the performance of modern volatile concurrent systems, this is still likely slower, and true NVRAM devices may require more than 100ns per serialized persist.
-Furthermore, TEO requires frequent persist barriers.
+Furthermore, PEO requires frequent persist barriers.
 While these epoch barriers are deemed intuitive, they are not as easy to use as sequential consistency (no barriers required) and are more complicated to reason about with multi-threading (as evident by BPFS allowing deadlocks).
 
 \textbf{Relaxed persistent consistency.}
 Finally, I imagine a relaxed consistency model for this buffer, shown in Figure~\fixme{ref} (top).
 I will not describe the semantics of this model, but rather the dependencies I want it to have.
-Like TEO buffer data persists in parallel.
+Like PEO buffer data persists in parallel.
 Like LPO there are no dependencies between counter persists subsequent buffer persists.
 In fact, this is true even for single-threaded use.
 Doing so requires more complicated barriers that do not impose serial dependencies between epochs, but instead allow precise, possibly named dependencies.
