@@ -4,9 +4,9 @@ This chapter investigates performance more directly, considering two simple pers
 While I will describe how I expect the persistent memory consistency models from the previous chapters operate with each, the point is to highlight potential performance bottlenecks and necessary optimizations.
 I do not yet consider actual programming models or hardware to provide these optimizations.
 
-Prior work has examined building data structures for NVRAM \fixme{cite BFPS, Shivaram, IBM log, NVRAM structures for analytics}.
-However, these works generally address other issues such as write endurance, suggest data structures that semantically fit NVRAM without concern for performance \fixme{Shivaram}, or propose complicated software mechanisms to work around incomplete or inferior persistent consistency models \fixme{IBM}.
-While \fixme{BPFS} takes a more holistic approach, their model falls short in terms of correctness, multi-threaded performance, and I believe certain single threaded-workloads, as I will show shortly.
+Prior work has examined building data structures for NVRAM.
+However, these works generally address other issues such as write endurance \cite{ChenGibbons11}, suggest data structures that semantically fit NVRAM without concern for performance \cite{VenkataramanTolia11}, or propose complicated software mechanisms to work around incomplete or inferior persistent consistency models \cite{FangHsiao11}.
+While \cite{ConditNightingale09} takes a more holistic approach, their model falls short in terms of correctness, multi-threaded performance, and I believe certain single threaded-workloads, as I will show shortly.
 I take a different approach, looking at potential performance concerns and using this insight to imagine new persistent consistency models and optimizations.
 
 \section{Persistent Buffer}
@@ -16,15 +16,15 @@ I take a different approach, looking at potential performance concerns and using
 \input{PMC_patterns/Fig.buffer_PEO_LPO.tex}
 \input{PMC_patterns/Fig.buffer_relaxed_elision.tex}
 
-I first discuss a persistent buffer, used as an OLTP database centralized log in \fixme{cite}.
-This log buffer contains a persistent data array as well as a persistent counter, marking the end of the valid, persistent region of the buffer, shown at the top of Figure~\fixme{ref}.
+I first discuss a persistent buffer, used as an OLTP database centralized log in \cite{FangHsiao11}.
+This log buffer contains a persistent data array as well as a persistent counter, marking the end of the valid, persistent region of the buffer, shown at the top of Figure~\ref{fig:buffer}.
 In the example buffer slots 0 and 1 are persistent and valid, while slots 2 and 3 are not (0 and 1 will be recovered on failure).
 For simplicity, I neglect details that require data to wrap around the end of the buffer and instead pretend that the valid region of the buffer always grows from the base offset of the buffer through the address marked by the counter.
 Data are inserted into this buffer by acquiring a volatile lock on the structure, reading the counter to determine the next available address, persisting data to that address, and incrementing the counter by the size of the inserted data before releasing the lock.
 For correctness, buffer data must persist before the new counter value persists, and all counter values must persist in order.
 These dependencies guarantee that on recovery the valid portion of the buffer will be from the offset through the address marked by the persistent counter.
 
-\fixme{cite} assume the BPFS consistency model, noting that updates to the counter field will cause each thread to stall while the previous value persists.
+\cite{FangHsiao11} assumes the BPFS consistency model, noting that updates to the counter field will cause each thread to stall while the previous value persists.
 Instead of considering other hardware and programming interfaces, they provide additional software complexity to allow only intermediate values of the counter to persist.
 I believe that their software has a recovery bug in it, but I leverage the idea of only persisting intermediate values later in this chapter.
 Additionally, the authors incorrectly assume that buffer data will persist in parallel.
@@ -32,7 +32,7 @@ According to the BPFS model all data dependencies between epochs, even dependenc
 This might be be fixed by introducing an additional volatile counter -- threads reserve buffer space using the volatile counter, copy data, and then write their counter value to the persistent counter.
 Such a design removes dependencies between buffer copies but requires additional effort and will probably result in mistakes.
 
-\textbf{PSC.} Under PSC (recall, persistent sequential consistency) all persists to the buffer and counter form a dependence chain, shown at the bottom of Figure~\fixme{ref}.
+\textbf{PSC.} Under PSC (recall, persistent sequential consistency) all persists to the buffer and counter form a dependence chain, shown at the bottom of Figure~\ref{fig:buffer}.
 Every atomically persistable segment (8 bytes) of buffer data persists in serial, followed by the new value of the counter.
 The next thread to insert into the buffer reads the counter, a shared variable, ordering all subsequent persists after persists of the previous insert.
 Assuming log entries are 100 bytes on average, each insert requires 14 serial persists (13 to persist the log entry data, 1 to persist the counter).
@@ -40,9 +40,9 @@ If NVRAM persists take even 100ns (a conservative estimate), entries can only be
 This rate is significantly slower than the throughput of modern concurrent buffers, where cache invalidations take anywhere from 10s to 100s ns (multi-core to multi-socket, respectively).
 Without relaxed persistent memory consistency models, NVRAM persists will necessarily create a throughput bottleneck.
 
-\textbf{LPO.} Next I consider the relaxed persistent consistency models introduced in Section~\fixme{ref}, starting with LPO.
+\textbf{LPO.} Next I consider the relaxed persistent consistency models introduced in Section~\ref{sec:PMC:PersistenceModels}, starting with LPO.
 Recall that LPO (local persist order) enforces program-order persist order within threads, but not cross-thread dependence order (barriers necessary).
-Figure~\fixme{ref} shows execution of LPO at the top.
+Figure~\ref{fig:buffer_PEO_LPO} shows execution of LPO at the top.
 Buffer persists continue to serialize and must persist before the counter, but there is no longer a dependence between the counter persisting and later buffer persists from other threads.
 Counter values must still persist in-order, which will be enforced with a persist barrier or as a result of persists to the same memory address.
 Dependencies \emph{do} exist between counter persists and subsequent buffer persists on the same thread, shown as a dashed line in the Figure.
@@ -50,7 +50,7 @@ If every log entry is inserted by a separate thread, LPO results in a persist cr
 However, log entries within a single thread must persist in-order, limiting the throughput of each individual thread.
 LPO is easy to program, as all persists within a thread occur-in order, and provides high throughput given sufficient buffering and a large number of threads to yield persist parallelism.
 
-\textbf{PEO.} The bottom of Figure~\fixme{ref} displays buffer execution for PEO -- partial epoch order.
+\textbf{PEO.} The bottom of Figure~\ref{fig:buffer_PEO_LPO} displays buffer execution for PEO -- partial epoch order.
 Partial epoch order allows single-thread persists to occur in parallel by placing them in epochs.
 Epochs across threads are ordered (or considered concurrent) according to the consistency model and memory sharing.
 By using epochs, PEO allows buffer data to persist in parallel, but may still order buffer persists with counter persists, and counter persists to subsequent buffer persists.
@@ -61,7 +61,7 @@ Furthermore, PEO requires frequent persist barriers, placing a burden on the pro
 While these epoch barriers are deemed intuitive, they are not as easy to use as sequential consistency (no barriers required) and are more complicated to reason about with multi-threading (as evident by BPFS allowing deadlocks).
 
 \textbf{Relaxed persistent consistency.}
-Finally, I imagine a relaxed consistency model for this buffer, shown in Figure~\fixme{ref} (top).
+Finally, I imagine a relaxed consistency model for this buffer, shown in Figure~\ref{fig:buffer_relaxed_elision} (top).
 I will not describe the semantics of this model, but rather the dependencies I want it to have.
 Like PEO buffer data persists in parallel.
 Like LPO there are no dependencies between counter persists subsequent buffer persists.
@@ -70,10 +70,10 @@ Doing so requires more complicated barriers that do not impose serial dependenci
 For example, a barrier may enforce that a given epoch depends only on the previous epoch from the same thread, and no other epochs regardless of thread communication or data dependencies.
 Such a barrier would allow a programmer to persist buffer data and guarantee that buffer persists never serialize on counter persists other than the associated counter update.
 
-I introduce an additional optimization to the relaxed consistency model, leveraging \fixme{cite IBM}'s insight that not all values must persist.
+I introduce an additional optimization to the relaxed consistency model, leveraging the insite from \cite{FangHsiao11} that not all values must persist, shown at the bottom of Figure~\ref{fig:buffer_relaxed_elision}.
 Persistent memory consistency models describe the set of \emph{allowable} persistent states, yet not every allowable state must actually persist.
 Since the counter is atomically persistable (8 bytes), the memory system may defer persisting new values of the counter.
-Once the buffer data for two (or more) adjacent log entries successfully persist, the counter value for the last entry persists, implicitly persisting all intermediate counter values at once and validating the log entries.
+Once the buffer data for two (or more) adjacent log entries successfully persist, the counter value for the last entry persists, implicitly persisting all intermediate counter values at once and validating the log entries, eliding persist epochs entirely.
 By recognizing that the counter variable is atomically persistable and exists in an epoch by itself, we might imagine a new epoch barrier that restricts the epoch to a single persist of atomic persist size.
 This persist will defer, hoping to coalesce with similar persist epochs.
 A new value will eventually persist, but may skip any intermediate values so long as all the coalesced persist epochs' dependencies are satisfied.
@@ -90,7 +90,7 @@ It remains unclear if this property should be leveraged by hardware or in the co
 
 \input{PMC_patterns/Fig.linkedlist.tex}
 
-Finally, I consider a persistent linked list, shown in Figure~\fixme{ref}.
+Finally, I consider a persistent linked list, shown in Figure~\ref{fig:LinkedList}.
 The linked list contains a persistent Head reference, persistent nodes (each containing a \emph{next} reference), and a volatile Tail reference to quickly find the end of the list for insertion (although we assume that at recovery the list will only be traversed from the Head).
 Unlike the persistent buffer, where log entries persist in parallel and the counter is overwritten, the linked list does not overwrite any values as new nodes are added.
 For correctness, node data must persist before the node \emph{next} reference pointing to that data.
@@ -108,7 +108,7 @@ This chapter considered persistent memory consistency from a performance perspec
 I investigated two simple programming patterns, considering how my proposed persistent consistency models might perform and imagining additional optimizations, separate from the programming model, necessary to increase persistent data structure throughput.
 
 For the future, I would like to develop these ideas and design some sort of methodology to support my claim that persistent memory consistency models are a necessary tool and require further investigation.
-To start, I would like to implement the above data structures, annotating the code with persist dependencies and using a timing model similar to the one outlined in Section~\fixme{ref}.
+To start, I would like to implement the above data structures, annotating the code with persist dependencies and using a timing model similar to the one outlined in Section~\ref{sec:OLTP_design:Methodology}.
 Additionally, I would consider implementing these models in Shore-MT.
 Finally, I will consider additional models if the described models do not provide sufficient performance, or I discover that other models provide sufficient performance and are easier to program for.
 I am attempting to submit a paper based on these ideas to this upcoming ISCA, November 2013, and defend next year (2014).

@@ -7,9 +7,9 @@ I would especially like the thank Brian and Bill for bringing industry's point o
 
 This chapter outlines the problems with existing disk recovery management, the potential pitfalls of using NVRAM for persistent applications, a methodology for evaluating NVRAM devices that do not yet exist, and a description of several candidate software designs for NVRAM recovery management, to be evaluated later.
 I consider this chapter largely complete with two exceptions.
-First, I have performed a validation of my timing model that has not yet been published that I intend to include in the final thesis \fixme{forward ref a section}.
+First, I have performed a validation of my timing model that has not yet been published that I intend to include in the final thesis \cite{sec:OLTP_design:Methodology:Proposed}.
 Second, my implementation of \GroupCommit is more complex (and interesting, in my opinion) than a 12 page journal paper allows room to describe.
-I intend to include a detailed description in Section \fixme{forward ref}.
+I intend to include a detailed description in Section~\cite{sec::OLTP_design:GroupCommit:Proposed}.
 
 \section{Introduction}
 \label{sec:OLTP_design:Intro}
@@ -129,7 +129,7 @@ I remove redo logs by keeping the database's durable state up-to-date.
 In ARIES terms, the database is constantly at its replayed state---there is no need to replay a redo log after failure.
 Undo logs need not maintain a global order (transactions are already free to roll back in any order), and instead I distribute ARIES undo logs per transaction.
 Such non-concurrent logs are simpler and impose less overhead than centralized logs.
-Other databases (such as Oracle) already distribute undo logs in rollback segments \fixme{cite}.
+Other databases (such as Oracle) already distribute undo logs in rollback segments and undo table spaces \cite{OracleDoc}.
 Transaction undo logs remain durable so that in-flight transactions at the time of failure can be rolled back.
 Each page update consists of (1) latching the page, (2) inserting an undo entry into the transaction-private undo log, using \texttt{persist\_wal()}, (3) updating the page in-place, using \texttt{persist\_page()} (without an intermediate volatile page), and (4) releasing the page latch.
 This protocol ensures all updates to a page, and updates within a transaction, persist in-order, and that no transaction reads data from a page until it is durable.

@@ -8,7 +8,7 @@ In the next chapter I give examples of programming patterns, why they require re
 
 Future NVRAMs will provide a persistent store with the programming interface of modern main memories.
 While such technologies could revolutionize the design of recoverable systems and durable storage, questions remain regarding device performance and the NVRAM programming model.
-Chapters~\fixme{ref} and~\fixme{ref} consider an abstract \emph{persist barrier} capable of enforcing persist order or blocking until previous persists complete.
+Chapters~\ref{chap:OLTP_design} and~\ref{chap:OLTP_eval} considered an abstract \emph{persist barrier} capable of enforcing persist order or blocking until previous persists complete.
 Instead of considering an implementation or exact semantics of these barriers, I instead looked at the effect average persist barrier latency had on OLTP software design.
 This project delves into the details of persist barriers, considering their implementation, performance impact, and programming model.
 
@@ -186,7 +186,7 @@ The next model relaxes the multi-threaded constraint.
 \label{sec:PMC:PersistenceModels:LPO}
 
 This model considers that thread communication and data persistence should not always occur at the same granularity.
-Imagine, as an example, the \GroupCommit design from Chapter~\fixme{ref}.
+Imagine, as an example, the \GroupCommit design from Section~\ref{sec:OLTP_design:GroupCommit}.
 In this design we required a volatile staging buffer, separate from the primary NVRAM store, where batch updates occur.
 Only at the end of the batch would we copy the original batch data to an undo log and persist batch updates in-place to NVRAM.
 An alternative design omits this staging buffer by allowing updates during a batch to persist directly to the NVRAM address space.
@@ -222,17 +222,17 @@ The batch manager is then free to invalidate the log, committing the batch.
 The use of persist barriers ensures that all store data persists before the batch commits, but during batch execution extraneous cross-thread persist dependences do not limit execution.
 
 \input{PMC/Fig.LPO.tex}
-LPO potentially improves performance by minimizing the critical path of persist dependencies, shown in Figure~\fixme{ref}
+LPO potentially improves performance by minimizing the critical path of persist dependencies, shown in Figure~\ref{figure:LPO}
 Data sharing and the resulting cross-thread persist dependencies increase the critical path of persists.
 Even with buffering and high performance NVRAM memory systems that allow persists to buffer while threads continue, such chains limit throughput buffers become full, or increase delays caused by syncs while the buffers flush in persist-dependence order.
 Since threads persist independently (except where persist barriers are placed), adding more threads provides more persist throughput, similarly to Symmetric Multi Threading (SMT), which provides memory parallelism on existing systems.
-However, the need to perform all persists in serial \emph{within} a thread remains a concern.
+However, the need to perform all persists in serial within a thread remains a concern.
 The Byte Addressable File System (BPFS) addresses intra-thread persist dependencies by introducing additional persist barriers.
 
 \subsection{Byte Addressable Persistent File System}
 \label{sec:PMC:PersistenceModels:BPFS}
 
-The Byte Addressable Persistent File System (BPFS) \fixme{cite} is the de-facto standard for existing persistent memory consistency models, used additionally by \fixme{cite NVHeaps, IBM's logging, others?}.
+The Byte Addressable Persistent File System (BPFS) \cite{ConditNightingale09} is the de-facto standard for existing persistent memory consistency models, used additionally by \cite{CoburnCaulfield11, FangHsiao11, VenkataramanTolia11}.
 Threads persist by writing to the persistent address space, enforcing persist order via \emph{epoch barriers} which divide persists into \emph{epochs}.
 BPFS additionally provides a hardware design, enforcing persist order with only cache modifications (little additionally buffering or modifications to the memory system).
 A table of epochs is kept in the cache of each CPU, with each cache line keeping track of its persist epoch number and process/thread ID.
@@ -245,7 +245,7 @@ Persists within epochs write to the device in parallel, volatile execution proce
 
 \input{PMC/Fig.persist_wal.tex}
 
-Consider the log in Chapters~\fixme{ref} and~\fixme{ref}, demonstrated in \texttt{persist\_wal} (\fixme{refer back}) and shown here in Figure~\fixme{ref}.
+Consider the ARIES log from Chapter~\ref{chap:OLTP_design}, demonstrated in \texttt{persist\_wal} (Figure~\ref{fig::Code}) with persist dependencies shown in Figure~\ref{fig:persist_wal_persist}.
 Persisting a single entry requires first persisting the entry's body, followed by the tail LSN.
 Most log entries are large (at least 100 bytes), containing information about the transaction, store, page, tuple, and action taken.
 According to PSC and LPO all persists (8 byte segments) to the log entry body must occur in order -- an unnecessary constraint that increases persist critical path.
