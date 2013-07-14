@@ -1,0 +1,56 @@
+
+\vspace{0.1 in}
+\section{Data Center Power Flow}
+
+We begin by briefly surveying major data center subsystems and their interactions. Figure  \ref{figure::PowerFlow} illustrates the primary power-consuming subsystems and how power and heat flow among them.  Servers (arranged in racks) consume the dominant fraction of data center power, and their power draw varies with utilization.  
+
+The data center's power conditioning infrastructure typically accepts high-voltage AC power from the utility provider, transforms its voltage, and supplies power to uninterruptible power supplies (UPSs).  The UPSs typically charge continuously and supply power in the brief gap until generators can start during a utility failure.   From the UPS, electricity is distributed at high voltage (480V-1kV) to power distribution units (PDUs), which  regulate voltage to match IT equipment requirements.  Both PDUs and UPSs impose substantial power overheads, and their overheads grow with load. 
+
+Nearly all power dissipated in a data center is converted to heat, which must be evacuated from the facility.  Removing this heat while maintaining humidity and air quality requires an extensive cooling infrastructure.  Cooling begins with the computer room air handler (CRAH), which transfer heat from servers' hot exhaust to a chilled water/glycol cooling loop while supplying cold air throughout the data center.
+CRAHs appear in various forms, from room air conditioners that pump air through underfloor plenums to in-row units located in containment systems.
+The water/glycol heated by the CRAHs is then pumped to a chiller plant where heat is exchanged between the inner water loop and a second loop connected to a cooling tower, where heat is released to the outside atmosphere.
+Extracting heat in this manner requires substantial energy; chiller power dominates overall cooling system power, and its requirements grow with both the data center thermal load and outside air temperature. 
+
+
+%Within a data center the power that each component uses varies substantially.
+%Ideally, nearly all power would be consumed by the IT equipment.
+%In reality, the other devices frequently draw the majority of power.
+%Figure  \ref{figure::PowerFlow} shows the power distribution of a typical highly available dual-power-path data center with N+1 CRAC units.
+%The data center under consideration runs at 30\% of peak capacity.
+%Only 30\% of the eletrical power in reaches the servers, corresponding to a PUE of 3.33.
+%The cooling system as a whole consumes 45\% of total power, the majority by the chiller plant.
+%23\% of the power is lost by the power conditioning equipment.
+%Finally, fixed-cost facilities such as lighting account for the final 2\%.
+
+
+
+%Data center power draw varies primarily as a function of total data center utilization and external ambient temperature.
+%Figure \ref{figure::Dependencies} shows how the various components effect each other's power draw.
+%The total load directly determines the power needed by the servers and IT equipment.
+%All of this power must be provided through the power conditioning system - UPS and PDU.
+%As the power draw in the UPS and PDU is electrical loss, the power conditioning system as a whole accounts for power draw roughly proportional to total data center utilization.
+%The servers and power conditioning equipment together produce heat that must be removed by the cooling system.
+%Each component of the cooling system requires power that grows superlinear with the heat to be removed.
+%Thus, the overall cooling power necessary will increase as utilization increases.
+%Additionally, the power required by the chiller greatly increases as the outside ambient air temperature rises.
+
+
+%Numerous components in a data center consume power.
+%Generally, devices can be characterized as part of the electrical infrastructure or cooling infrastructure.
+%See Figure \ref{figure::PowerFlow} for a depiction of typical data center components.
+%In order to meet the high power demands of servers, data centers require power distribution units (PDU) capable of transforming and regulating voltages.
+%As can be seen, each PDU supports a number of racks in the computer room.
+%Additionally, uninterruptable power supplies (UPS) are necessary to ensure the availability of servers and other computing resources in the event of a power failure.
+%Together, the servers, PDU, and UPS generate excessive amounts of heat, requiring an extensive cooling infrastructure.
+%Cooling begins with the computer room air conditioner (CRAC).
+%The CRAC blows air through the computer room, transfering heat from the warm computer room air to a chilled water or glycol supply.
+%The liquid is pumped to a chiller plant where heat is exchanged between the inner water loop and a second loop connected to a cooling tower.
+%The chiller must provide the cooling tower with water hotter than the outside air in order for heat to transfer from the cooling tower to the atmosphere.
+%As the outside temperature increases, the chiller consumes more energy.
+%During design, sufficient resources must be accounted for in order to power and cool the data center at peak utilization.
+%It is important to realize that nearly every component discussed here runs less efficiently at lower loads.
+%Understanding the power and cooling requirements of each of these components is central to developing a comprehensive model of data center power consumption.
+
+%We construct a model for the total data center power draw by developing detailed component-wise models for each of the primary power-consuming components of a data center.
+%We base each component model on existing models captured in computer engineering and ASHRAE literature as well as manufacturer spec sheets.
+%In order to understand data center power usage, it is important to decompose the various sub-systems and their unique purposes and power consumption characteristics.
