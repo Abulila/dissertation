@@ -1,43 +1,13 @@
 The previous chapter looked at persistent memory programming from the perspective of consistency models and programming interface.
-While necessary to define correct program behavior, I did not consider actual implementations or what optimizations provide optimal performance.
-This chapter considers two simple persistent programming patterns -- a persistent log/buffer and a persistent linked list.
-While I will describe how the persistent memory consistency models of the previous chapters operate with each, the point is to highlight potential performance bottlenecks and necessary optimizations.
+While necessary to define correct program behavior, I did not consider actual implementations or investigate specific optimizations.
+This chapter investigates performance more directly, considering two simple persistent programming patterns -- a persistent log/buffer and a persistent linked list.
+While I will describe how I expect the persistent memory consistency models from the previous chapters operate with each, the point is to highlight potential performance bottlenecks and necessary optimizations.
 I do not yet consider actual programming models or hardware to provide these optimizations.
 
 Prior work has examined building data structures for NVRAM \fixme{cite BFPS, Shivaram, IBM log, NVRAM structures for analytics}.
 However, these works generally address other issues such as write endurance, suggest data structures that semantically fit NVRAM without concern for performance \fixme{Shivaram}, or propose complicated software mechanisms to work around incomplete or inferior persistent consistency models \fixme{IBM}.
 While \fixme{BPFS} takes a more holistic approach, their model falls short in terms of correctness, multi-threaded performance, and I believe certain single threaded-workloads, as I will show shortly.
-
-\section{Performance}
-\label{sec:PMC_patterns:Performance}
-
-In the previous chapter I made a number of statements regarding the performance of NVRAM without much explanation.
-Here I describe how I expect NVRAM, the memory system, and the programming model to affect performance.
-Later sections will use these assumptions to reason about data structure performance and imaging performance optimizations.
-
-There are primarily two cases where persists may cause a thread to stall: ordering barriers and sync barriers.
-Ordering barriers may operate by stalling at the barrier until all previous persists complete, obviously stalling the thread of execution.
-More complex memory systems (such as BPFS) allow threads to continue executing ahead of persistent state, using a buffer to store persists (either in the cache or a memory buffer).
-If these buffers become full threads will need to stall until room becomes available.
-Therefore, persist throughput is the primary concern -- buffers allow threads to execute ahead of persistent state, but the average rate of persist must match the average rate of execution, otherwise stalls necessarily occur.
-
-Persist throughput is primarily limited by the number of persist dependencies in an applications.
-Memories typically allow high throughput so long as reads and writes may occur in parallel.
-Persist dependencies reduce parallelism, requiring that some set of writes persist entirely before any dependent persists begin.
-Since NVRAM cells may take up to microseconds to persists the longest dependence chain of persists may easily limit execution throughput and cause stalls.
-Persistent memory consistency models stand to improve throughput and reduce stalls by relaxing persist ordering constraints and minimize the persist critical path.
-The ultimate goal is to reduce persist critical path sufficiently that persist throughput exceeds execution throughput, providing the throughput of a DRAM system with the persistence of NVRAM.
-
-Persistent memory applications also introduce stalls at sync barriers.
-These are barriers used when interacting with the outside world (e.g., displaying something on-screen, communicating over the network).
-Unless this external communication can be ordered with persists, allowing the thread to continue doing other useful work, the thread must stall for previous persists to complete, hurting throughput.
-Additionally, end-to-end latency is important for many applications and tasks -- greater sync time (while persists drain/flush) leads to increased task latency.
-Again, persist critical path determines sync latency; if all independent writes may persist in parallel the time to sync is determined by the longest chain of persists outstanding at the time sync is called.
-
-The remainder of this chapter looks at two simple data structures, reasoning about durability while at the same time considering the persist critical path.
-While some of the problems highlighted here can be circumvented by software techniques (e.g., only allowing a single thread to persist, using control flow to conditionally place epoch boundaries), this misses the point of persistent memory consistency -- to provide an easily programmable interface.
-Rather, I assume the most straightforward and intuitive software design, investigating memory system optimizations.
-However, I do not consider actual implementations.
+I take a different approach, looking at potential performance concerns and using this insight to imagine new persistent consistency models and optimizations.
 
 \section{Persistent Buffer}
 \label{sec:PMC_patterns:Buffer}
@@ -48,29 +18,33 @@ However, I do not consider actual implementations.
 
 I first discuss a persistent buffer, used as an OLTP database centralized log in \fixme{cite}.
 This log buffer contains a persistent data array as well as a persistent counter, marking the end of the valid, persistent region of the buffer, shown at the top of Figure~\fixme{ref}.
-For simplicity, I neglect details that require data to wrap around the end of the buffer and instead pretend that the valid region of the buffer is always from the base offset of the buffer through the address marked by the counter.
-Data are inserted into this buffer by aquiring a volatile lock on the structure, reading the counter to determine the next available address, persisting data to that address, and incrementing the counter by the size of the inserted data before releasing the lock.
+In the example buffer slots 0 and 1 are persistent and valid, while slots 2 and 3 are not (0 and 1 will be recovered on failure).
+For simplicity, I neglect details that require data to wrap around the end of the buffer and instead pretend that the valid region of the buffer always grows from the base offset of the buffer through the address marked by the counter.
+Data are inserted into this buffer by acquiring a volatile lock on the structure, reading the counter to determine the next available address, persisting data to that address, and incrementing the counter by the size of the inserted data before releasing the lock.
 For correctness, buffer data must persist before the new counter value persists, and all counter values must persist in order.
 These dependencies guarantee that on recovery the valid portion of the buffer will be from the offset through the address marked by the persistent counter.
+
 \fixme{cite} assume the BPFS consistency model, noting that updates to the counter field will cause each thread to stall while the previous value persists.
 Instead of considering other hardware and programming interfaces, they provide additional software complexity to allow only intermediate values of the counter to persist.
-I believe that their software has a recovery bug in it, but leverage the idea of only persisting intermediate values later.
-Additionally, they incorrectly assume that buffer data will persist in parallel.
+I believe that their software has a recovery bug in it, but I leverage the idea of only persisting intermediate values later in this chapter.
+Additionally, the authors incorrectly assume that buffer data will persist in parallel.
 According to the BPFS model all data dependencies between epochs, even dependencies to volatile data, impose an epoch order, serializing those epochs.
+This might be be fixed by introducing an additional volatile counter -- threads reserve buffer space using the volatile counter, copy data, and then write their counter value to the persistent counter.
+Such a design removes dependencies between buffer copies but requires additional effort and will probably result in mistakes.
 
 \textbf{PSC.} Under PSC (recall, persistent sequential consistency) all persists to the buffer and counter form a dependence chain, shown at the bottom of Figure~\fixme{ref}.
-Every atomically persistable segment of buffer data persists in serial, followed by the new value of the counter.
+Every atomically persistable segment (8 bytes) of buffer data persists in serial, followed by the new value of the counter.
 The next thread to insert into the buffer reads the counter, a shared variable, ordering all subsequent persists after persists of the previous insert.
 Assuming log entries are 100 bytes on average, each insert requires 14 serial persists (13 to persist the log entry data, 1 to persist the counter).
-If NVRAM persists take even 100ns (a conservative estimate), entries can only be inserted every 1.4\textmu s, on average (any faster and buffers will fill).
-This is significantly slower than the throughput of modern concurrent buffers, where cache invalidations take anywhere from 10s to 100s ns (multi-core to multi-socket, respectively).
+If NVRAM persists take even 100ns (a conservative estimate), entries can only be inserted every 1.4\textmu s, on average (any faster and buffers will eventually fill).
+This rate is significantly slower than the throughput of modern concurrent buffers, where cache invalidations take anywhere from 10s to 100s ns (multi-core to multi-socket, respectively).
 Without relaxed persistent memory consistency models, NVRAM persists will necessarily create a throughput bottleneck.
 
 \textbf{LPO.} Next I consider the relaxed persistent consistency models introduced in Section~\fixme{ref}, starting with LPO.
-Recall that LPO (local persist order) enforcing program-order persist order within threads, but cross-thread dependencies do not enforce persist order without barriers.
+Recall that LPO (local persist order) enforces program-order persist order within threads, but not cross-thread dependence order (barriers necessary).
 Figure~\fixme{ref} shows execution of LPO at the top.
 Buffer persists continue to serialize and must persist before the counter, but there is no longer a dependence between the counter persisting and later buffer persists from other threads.
-Counter values must still persist in-order, which must be enforced with a persist barrier.
+Counter values must still persist in-order, which will be enforced with a persist barrier or as a result of persists to the same memory address.
 Dependencies \emph{do} exist between counter persists and subsequent buffer persists on the same thread, shown as a dashed line in the Figure.
 If every log entry is inserted by a separate thread, LPO results in a persist critical path that involves only counter persists.
 However, log entries within a single thread must persist in-order, limiting the throughput of each individual thread.
@@ -79,11 +53,11 @@ LPO is easy to program, as all persists within a thread occur-in order, and prov
 \textbf{PEO.} The bottom of Figure~\fixme{ref} displays buffer execution for PEO -- partial epoch order.
 Partial epoch order allows single-thread persists to occur in parallel by placing them in epochs.
 Epochs across threads are ordered (or considered concurrent) according to the consistency model and memory sharing.
-By using epochs, PEO allows buffer data to persist in parallel, but still orders buffer persists with counter persists, and counter persists to subsequent buffer persists.
+By using epochs, PEO allows buffer data to persist in parallel, but may still order buffer persists with counter persists, and counter persists to subsequent buffer persists.
 The persist critical path forms a chain of two persist epochs per insert.
-Using our earlier assumptions, this buffer will allow inserts every 200ns on average.
+Using our earlier assumptions, this model allows inserts every 200ns on average.
 While getting closer to the performance of modern volatile concurrent systems, this is still likely slower, and true NVRAM devices may require more than 100ns per serialized persist.
-Furthermore, PEO requires frequent persist barriers.
+Furthermore, PEO requires frequent persist barriers, placing a burden on the programmer.
 While these epoch barriers are deemed intuitive, they are not as easy to use as sequential consistency (no barriers required) and are more complicated to reason about with multi-threading (as evident by BPFS allowing deadlocks).
 
 \textbf{Relaxed persistent consistency.}
@@ -93,12 +67,12 @@ Like PEO buffer data persists in parallel.
 Like LPO there are no dependencies between counter persists subsequent buffer persists.
 In fact, this is true even for single-threaded use.
 Doing so requires more complicated barriers that do not impose serial dependencies between epochs, but instead allow precise, possibly named dependencies.
-For example, a barrier may enforce that a given epoch depends \emph{only} on the following epoch, and no other epochs regardless of thread communication or data dependencies.
-Such a barrier would allow a programmer to persist buffer data and guarantee that buffer persists never serialize on counter persists other than the corresponding counter update.
+For example, a barrier may enforce that a given epoch depends only on the previous epoch from the same thread, and no other epochs regardless of thread communication or data dependencies.
+Such a barrier would allow a programmer to persist buffer data and guarantee that buffer persists never serialize on counter persists other than the associated counter update.
 
-I introduce a final optimization, leveraging \fixme{cite IBM}'s insight that not all values must persist.
-Persistent memory consistency models describe the set of \emph{allowable} persistent states, yet not every allowable state must exist in time.
-Since the counter is of an atomically persistable size (8 bytes or less), the memory system may defer persisting new values of the counter.
+I introduce an additional optimization to the relaxed consistency model, leveraging \fixme{cite IBM}'s insight that not all values must persist.
+Persistent memory consistency models describe the set of \emph{allowable} persistent states, yet not every allowable state must actually persist.
+Since the counter is atomically persistable (8 bytes), the memory system may defer persisting new values of the counter.
 Once the buffer data for two (or more) adjacent log entries successfully persist, the counter value for the last entry persists, implicitly persisting all intermediate counter values at once and validating the log entries.
 By recognizing that the counter variable is atomically persistable and exists in an epoch by itself, we might imagine a new epoch barrier that restricts the epoch to a single persist of atomic persist size.
 This persist will defer, hoping to coalesce with similar persist epochs.
@@ -107,8 +81,8 @@ The result is that the persist critical path is now bounded to a constant -- per
 
 More generally, persist dependencies form a schedule or DAG.
 Any nodes in a DAG may be combined into a super node so long as 1) all persists in the super node fit in an atomically persistable size, 2) combining nodes retains the DAG (no cycles), and 3) the super node inherits all dependencies of its member nodes, and all nodes that previously depended on the super node's member nodes now depend on the super node.
-An interesting prospect is that as NVRAM technologies progress that atomically persistable size may increase (say, from 8 bytes to 64 bytes).
-Larger atomic persists may eventually allow more persist epochs to coalesce into super nodes, decreasing persist critical path, possibly without intervention from the user.
+An interesting prospect is that as NVRAM technologies progress, the atomically persistable size may increase (say, from 8 bytes to 64 bytes).
+Larger atomic persists allow additional persist epochs to coalesce into super nodes, decreasing persist critical path, possibly without intervention from the user.
 It remains unclear if this property should be leveraged by hardware or in the consistency model, if at all.
 
 \section{Persistent Linked List}
@@ -118,9 +92,9 @@ It remains unclear if this property should be leveraged by hardware or in the co
 
 Finally, I consider a persistent linked list, shown in Figure~\fixme{ref}.
 The linked list contains a persistent Head reference, persistent nodes (each containing a \emph{next} reference), and a volatile Tail reference to quickly find the end of the list for insertion (although we assume that at recovery the list will only be traversed from the Head).
-Unlike the persistent buffer, where log entries could persist in parallel and the counter was overwritten, the linked list does not overwrite any values as new nodes are added.
-For correctness, node data must persist before node \emph{next} references.
-However, strict persistent consistency models will enforce that all nodes persist in the order that they are inserted into the list (shown as dotted lines in the bottom of the Figure).
+Unlike the persistent buffer, where log entries persist in parallel and the counter is overwritten, the linked list does not overwrite any values as new nodes are added.
+For correctness, node data must persist before the node \emph{next} reference pointing to that data.
+However, strict persistent consistency models will enforce that all nodes persist in the order that they are inserted into the list (dependencies shown as dotted lines in the bottom of the Figure).
 Ignoring sync operations briefly, it would be correct to allow nodes to persist in parallel (reference persists still ordered after data), and simply determine the persistent and valid portion of the list at recovery.
 Doing so bounds the persist critical path to a constant.
 However, there is now no efficient way to sync the list short of traversing the entire list again, ordering the sync after all persists within the traversal.
@@ -131,13 +105,13 @@ Faster, more efficient, yet intuitive sync design remains an interesting challen
 \label{sec:PMC_patterns:Conclusion}
 
 This chapter considered persistent memory consistency from a performance perspective.
-I investigated two simple programming patterns, considering how my proposed persistent consistency models might perform and considering additional optimizations, separate from consistency models, necessary to increase persistent data structure throughput.
+I investigated two simple programming patterns, considering how my proposed persistent consistency models might perform and imagining additional optimizations, separate from the programming model, necessary to increase persistent data structure throughput.
 
-For the future, I would like to develop these ideas and form some sort of methodology to support that persistent memory consistency models are a necessary tool and require further investigation.
+For the future, I would like to develop these ideas and design some sort of methodology to support my claim that persistent memory consistency models are a necessary tool and require further investigation.
 To start, I would like to implement the above data structures, annotating the code with persist dependencies and using a timing model similar to the one outlined in Section~\fixme{ref}.
 Additionally, I would consider implementing these models in Shore-MT.
-Finally, I will consider additional models if these do not provide sufficient performance, or I discover that other models provide enough performance and are easier to program for.
-I am attempting to submit a paper to this upcoming ISCA, November 2013, and defend next year (2014).
+Finally, I will consider additional models if the described models do not provide sufficient performance, or I discover that other models provide sufficient performance and are easier to program for.
+I am attempting to submit a paper based on these ideas to this upcoming ISCA, November 2013, and defend next year (2014).
 
-Future work (hopefully outside the scope of my thesis) might consider an evaluation framework that does not require code annotation -- programs are written truly assuming the consistency models.
+Future work (hopefully outside the scope of my thesis) might consider an evaluation framework that does not require code annotation -- programs are written truly assuming consistency models and executed via simulation.
 Additionally, future work will consider actual hardware implementations of useful persistent memory consistency models.
