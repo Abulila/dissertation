@@ -109,7 +109,7 @@ Finally, the log is marked invalid.
 Four persist barriers ensure that each update persists before the next, enforcing consistency at all points in execution.
 Recovery checks the valid flags of all page logs, copying any valid log back in-place.
 The log is always valid while the page persists in-place, protecting against partial NVRAM writes.
-Together, \texttt{persist\_wal()} and \texttt{persist\_page()} provide the tools necessary to build our recovery mechanisms.
+Together, \texttt{persist\_wal()} and \texttt{persist\_page()} provide the tools necessary to construct recovery mechanisms.
 I discuss these mechanisms next, describing their implementation and performance.
 
 \textbf{NVRAM Disk-Replacement.}
@@ -246,7 +246,7 @@ Persist time is minimized, and there is little room left for improvement.
 
 \section{Design Space}
 \label{sec:OLTP_design:Designs}
-I describe the space of possible designs given our choices regarding NVRAM read and write performance.
+I describe the space of possible designs given choices regarding NVRAM read and write performance.
 This discussion ignores possible uses of hard disk to provide additional capacity.
 Each design works alongside magnetic disk with additional buffer management and the constraint that pages persist to disk before eviction from NVRAM.
 
@@ -263,7 +263,7 @@ They describe the operation and correctness of each mechanism and provide an ana
 Their work represents the middle column, middle row of Table~\ref{table::DesignSpace} (\InPlace with no volatile buffer).
 Aky\"{u}rek and Salem present a hybrid DRAM and NVRAM buffer cache design alongside strategies for managing cache allocation \cite{SalemAkyrek95}.
 They evaluate their allocation strategies using database traces and queuing models to demonstrate the effectiveness of NVRAM at accelerating persistent writes.
-Partial Memory Buffers is closest to the middle-top cell of our design space table (\InPlace with a software-managed DRAM buffer), although that design considers NVRAM as part of a hybrid buffer, not the primary persistent store.
+Partial Memory Buffers is closest to the middle-top cell of the design space table (\InPlace with a software-managed DRAM buffer), although that design considers NVRAM as part of a hybrid buffer, not the primary persistent store.
 None of these works considers alternative approaches (such as \GroupCommit), to account for large persist barrier latency and associated delays.
 Additionally, This work extends prior work by providing a more precise performance evaluation and more detailed consideration of NVRAM characteristics.
 
@@ -309,7 +309,7 @@ Hence, Shore-MT runs in real time as if its buffer cache resided in NVRAM with t
 
 I introduce NVRAM read and write delays separately.
 Accurately modeling per-access increases in read latency is challenging, as reads are frequent and the expected latency increases on NVRAM are small.
-It is infeasible to use software instrumentation to model such latency increases at the granularity of individual reads; hardware support, substantial time dilation, or alternative evaluation techniques (e.g., simulation) would be required, all of which compromise accuracy and our ability to run experiments at full scale.
+It is infeasible to use software instrumentation to model such latency increases at the granularity of individual reads; hardware support, substantial time dilation, or alternative evaluation techniques (e.g., simulation) would be required, all of which compromise accuracy and the ability to run experiments at full scale.
 Instead, I use offline analysis with PIN \cite{LukCohn05} to determine (1) the reuse statistics of buffer cache pages, and (2) the average number of cache lines accessed each time a page is latched.
 Together, these offline statistics provide an average number of cache line accesses per page latch event in Shore-MT while considering the effects of page caching.
 I then introduce a delay at each latch based on the measured average number of misses and an assumed per-read latency increase based on the NVRAM technology.
@@ -330,9 +330,9 @@ The new value is atomically swapped into \emph{next\_available} via a Compare-An
 If the CAS fails (due to a race with a persist operation on another thread), the process repeats until it succeeds.
 Upon success, the thread delays until the end of its reservation.
 The main limitation of this approach is that it cannot model reservations shorter than the delay required to perform a CAS to a contended shared variable.
-This technique models reservations above 85ns accurately, which is sufficient for our experiments.
+This technique models reservations above 85ns accurately, which is sufficient for my experiments.
 
-I choose on-line timing modeling via software instrumentation in lieu of architectural simulations to allow our experiments to execute at full scale and in real time.
+I choose on-line timing modeling via software instrumentation in lieu of architectural simulations to allow experiments to execute at full scale and in real time.
 While modeling aspects of NVRAM systems such as cache performance and more precise persist barrier delays require detailed hardware simulation, I believe NVRAM device and memory system design are not sufficiently established to consider this level of detail.
 Instead, I investigate more general trends to determine if and when NVRAM read and write performance warrant storage management redesign.
 
@@ -343,7 +343,7 @@ Before starting recovery I drop the file system cache.
 Reported recovery time includes only the recovery portion of the Shore-MT process; I do not include system startup time nor non-recovery Shore-MT startup time.
 
 \textbf{Workloads}
-I use three workloads and transactions in our evaluation: TPCC, TPCB, and TATP.
+I use three workloads and transactions in this evaluation: TPCC, TPCB, and TATP.
 TPCC models order management for a company providing a product or service \cite{TPCC}.
 TPCB contains one transaction class and models a bank executing transactions across branches, tellers, customers, and accounts \cite{TPCB}.
 TATP includes seven transactions to model a Home Location Registry used by mobile carriers \cite{TATP}.
@@ -370,13 +370,52 @@ Experiments perform ``power runs" -- each thread generates and executes transact
 \subsection{Proposed Work}
 \label{sec:OLTP_design:Methodology:Proposed}
 
-While I long ago performed validation of our timing model, I intend to include it in the final thesis.
+While I long ago performed validation of my timing model, I intend to include it in the final thesis.
 The results will include a demonstration that the RDTSCP loop allows precise delays in increments of 20ns.
 Additionally, I will demonstrate the bandwidth can be accurately modeled so long as bandwidth reservations are above 85ns.
 The original validation was performed on a multi-socket system, using two processors.
-Since then I decided to restrict our experiments to a single socket due to WAL performance concerns.
+Since then I decided to restrict experiments to a single socket due to WAL performance concerns.
 Bandwidth reservations on a single socket will allow for smaller reservations, so the validation needs to be repeated.
 However, the multi-socket validation provides a conservative bound, supporting the correctness of my experiments.
+
+\section{Related Work}
+\label{sec:OLTP_design:RelatedWork}
+To the best of my knowledge, this work is the first to investigate NVRAM write latency and its effect on durable storage and recovery in OLTP.
+A large body of related work considers applications of NVRAM and reliable memories.
+
+Chen \emph{et al.} consider battery-backed DRAM as a reliable memory in the RIO project \cite{ChenNg96}.
+The file cache is treated as a reliable memory and is recovered after ``warm" reboots (power is retained).
+Ng and Chen build on RIO to place a database buffer cache in a reliable memory \cite{NgChen97}.
+However, the mechanisms they investigate are insufficient to provide against many types of failure or ensure proper recovery for truly nonvolatile memories. 
+
+Further work considers NVRAM in the context of file systems.
+Baker \emph{et al.} use NVRAM as a file cache to optimize disk I/O and reduce network traffic in distributed file systems \cite{BakerAsami92}.
+Greenan and Miller use NVRAM to store file system meta-data, improving performance while maintaining consistency and durability \cite{GreenanMiller06}.
+Both works continue to assume that disk provides the bulk of persistent storage.
+More recently, Condit \emph{et al.} demonstrate the hardware and software design necessary to implement a file system entirely in NVRAM as the Byte-Addressable Persistent File System (BPFS) \cite{ConditNightingale09}.
+While I assume similar hardware, I additionally consider a broad range of NVRAM performance and focus instead on databases.
+
+Other work develops programming paradigms and system organizations for NVRAM.
+Coburn \emph{et al.} propose NV-Heaps to manage NVRAM within the operating system, provide safety guarantees while accessing persistent stores, and atomically update data using copy-on-write \cite{CoburnCaulfield11}.
+Volos \emph{et al.} similarly provide durable memory transactions using Software Transactional Memory (STM) and physical redo logging per transaction \cite{VolosTack11}.
+While these works provide useful frameworks for NVRAM, they do not investigate the effect of NVRAM persist latency on performance, nor do they consider OLTP, where durability is tightly coupled with concurrency and transaction management.
+
+Recently, researchers have begun to focus specifically on databases as a useful application for NVRAM.
+Chen \emph{et al.} reconsider database algorithms and data structures to address NVRAM's write latency, endurance, and write energy concerns, generally aiming to reduce the number of modified NVRAM bits \cite{ChenGibbons11}.
+However, their work does not consider durable consistency for transaction processing.
+Venkataraman \emph{et al.} demonstrate a multi-versioned log-free B-Tree for use with NVRAM \cite{VenkataramanTolia11}.
+Indices are updated in place, similarly to my \InPlace, without requiring any logging (physical or otherwise) and while providing snap shot reads.
+Our work considers durability management at a higher level, user transactions, and consistency throughout the entire database.
+Finally, Fang \emph{et al.} develop a new WAL infrastructure for NVRAM that leverages byte addressable and persistent access \cite{FangHsiao11}.
+Fang aims to improve transaction throughput but retains centralized logging.
+I distinguish myself by investigating how NVRAM write performance guides database and recovery design more generally.
+
+While different than byte addressable NVRAMs, flash memory has become an important storage medium.
+Similar in theme to this work, numerous authors have considered designing databases specifically for flash (\cite{BernsteinReid11}, \cite{SarwatMokbel11}).
+NVRAM, unlike flash, allows more efficient in-place updates through byte-addressability, low persist latency, and atomic persists.
+
+Prior work (e.g., H-Store \cite{StonebrakerMadden07}) has suggested highly available systems as an outright replacement for durability.
+I argue that computers and storage systems will always fail, and durability remains a requirement for many applications.
 
 \section{Conclusion}
 \label{sec:OLTP_design:Conclusion}

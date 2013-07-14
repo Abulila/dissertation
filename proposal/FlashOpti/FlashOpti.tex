@@ -161,6 +161,33 @@ For this query, we observe a long cpu-bound period with negligible IO at the end
 Hence, I believe that this performance aberration is unrelated to the type of storage device, and may have arisen due to the methods employed to coax the optimizer to choose this join algorithm.
 In any event, neither of these outliers outweigh the broader conclusion that there is no particular need for the query optimizer to be SSD aware.
 
+\section{Related Work}
+\label{sec:FlashOpti:RelatedWork}
+Previous work studying the applicability of Flash memory in DBMS applications has focused on characterizing Flash, benchmarking specific database operations on Flash, and designing new layouts, data structures, and algorithms for use with Flash.
+
+Both Bouganim \emph{et al.} and Chen \emph{et al.} benchmark the performance of Flash for various IO access patterns \cite{Bouganim09uflip:understanding, Chen2009}.
+Bouganim introduces the uFLIP micro-benchmarks and tests their performance on several devices.
+Chen introduces another set of micro-benchmarks, concluding that poor random write performance poses a significant barrier to replacing conventional hard disks with Flash SSDs.
+While these micro-benchmarks are instructive for understanding database performance, I focus specifically on the performance of existing scan and join operators on SSD and disk.
+Others have also benchmarked Flash's performance within the context of DBMS systems.
+Lee \emph{et al.} investigate the performance of specific database operations on Flash, including multiversion concurrency control (MVCC), external sort, and hashes \cite{Lee2008}.
+Similar to my study, Do \emph{et al.} benchmark ad hoc joins, testing the effects of buffer pool size and page size on performance for both disk and Flash \cite{Do2009}.
+Although related to this study, neither of these works look at the specific performance differences between disk and Flash for scans and joins and how this might impact query optimization.
+
+Whereas the above works (and this study) focus on measuring the performance of existing databases and devices, others look ahead to redesign DBMS systems in light of the characteristics of Flash.
+Yin \emph{et al.} and Li \emph{et al.} present new index structures, focusing on maintaining performance while using sequential writes to update the index \cite{Yin2009, Li2009}.
+Baumann \emph{et al.} investigate Flash's performance alongside a hybrid row-column store referred to as ``Grouping" \cite{Baumann2010}.
+Similarly, Tsirogiannis \emph{et al.} use a column store motivated by the PAX layout to create faster scans and joins \cite{Tsirogiannis2009}.
+
+Interestingly, my findings contradict recommendations of these last two studies.
+Baumann concludes that SSDs shift optimal query execution towards index-based query plans.
+The study bases this conclusion on the observation that asynchronous random reads on Flash are nearly as fast as sequential reads.
+Indeed, the arguments made by Baumann are a key component of the intuition laid out in Section~\ref{section::Expectations} that led me to expect a need for SSD-aware query optimization.
+However, the conclusion neglects the observations discussed in Section~\ref{section::Scans} demonstrating that queries selecting more than a handful of tuples will likely retrieve the majority of pages in a relation, and thus gain no advantage from fast random IO.
+Tsirogiannis introduces a join algorithm that retrieves only the join columns, joins these values, and then retrieves projected rows via a temporary index.
+By our previous argument, scanning for projected data should retrieve the majority of data pages, preferring a relation scan, and thus provide comparable advantage on disk and SSD.
+I leave a comparative evaluation of their FlashJoin algorithm on SSD and disk to future work.
+
 \section{Conclusion}
 \label{sec:FlashOpti:Conclusion}
 Flash-based solid state disks provide an exciting new high-performance alternative to disk drives for database applications.
