@@ -252,7 +252,8 @@ According to PSC and LPO all persists (8 byte segments) to the log entry body mu
 Instead, BPFS allows the entire log entry body to persist in parallel, and enforces that the body persists before the LSN using a persist barrier.
 
 In consistency terms BPFS attempts to produce a total ordering of epochs that all threads observe (Total Epoch Order -- TEO -- would be a great name for this model).
-However, attempting to do so produces problems; multi-threaded BPFS execution may result in deadlock and the model restricts useful programming patterns.
+This ordering resembles transactional memory -- producing a total order on memory transactions -- except BPFS does not provide conncurrenty control (transactions can not abort).
+However, attempting to provide a total epoch order produces problems; multi-threaded BPFS execution may result in deadlock and restricts useful programming patterns.
 I will demonstrate that the implementation as described is susceptible to deadlock.
 
 {
