@@ -1,7 +1,7 @@
 This chapter motivates and defines \emph{Persistent Memory Consistency}.
-This should be considered future work and I welcome feedback.
-I first define the problem and then give examples of persistent memory consistency models.
-In the next chapter I give examples of programming patterns, why they require relaxed persistent consistency models, and possible optimizations.
+The ideas here constitute in-progress or future work and I welcome feedback.
+I first define the need for persistenct consistency and then give examples of persistent memory consistency models.
+In the next chapter I outline persistent programming patterns, why they require relaxed persistent consistency models, and possible optimizations.
 
 \section{Introduction}
 \label{sec:PMC:Intro}
@@ -10,19 +10,19 @@ Future NVRAMs will provide a persistent store with the programming interface of 
 While such technologies could revolutionize the design of recoverable systems and durable storage, questions remain regarding device performance and the NVRAM programming model.
 Chapters~\ref{chap:OLTP_design} and~\ref{chap:OLTP_eval} considered an abstract \emph{persist barrier} capable of enforcing persist order or blocking until previous persists complete.
 Instead of considering an implementation or exact semantics of these barriers, I instead looked at the effect average persist barrier latency had on OLTP software design.
-This project delves into the details of persist barriers, considering their implementation, performance impact, and programming model.
+This chapter delves into the details of persist barriers, considering their implementation, performance impact, and programming model.
 
 Persist barriers exist as a tool for programmers to ensure correct persistence behavior, while at the same time improving performance.
-Without persist barriers, all persists must truly occur in program order for the programmer to reason about persistent state.
-This is in fact a popular model for DRAM programming, but the volatile semantics of DRAM allows writes to execute to fast, volatile caches.
+Without persist barriers programmers could only reason about persistent state if all persists truly occur in program order.
+This is in fact a popular model for DRAM programming, but the volatile semantics of DRAM allows writes to execute to fast, volatile caches and hardware buffers.
 NVRAM persists, on the other hand, must always execute to a long latency memory; executing all NVRAM persists in-order introduces frequent, substantial stalls.
-Persist barriers remove these stalls by allowing all persists between barriers to occur in parallel.
-This is a prime example of using a more complicated programming model to provide performance optimizations.
+Persist barriers remove these stalls by allowing persists between barriers to occur in parallel.
+This is a prime example of using a more complicated programming model to enable performance optimizations.
 
-An altnernative mechanism to enforce persist order is to flush select cache lines or flush the entire cache, either blocking until all data persists or receiving an acknowledgement/interrupt.
-This model most closely matches existing disk interfaces -- The programmer invokes system calls to write individual pages and then calls a sync system call.
-However, this is a poor match for memory, where the programmer often has little control over how data is laid out (nor do we want programmers to reason about memory/cache architecture).
-Instead, we would like a more natural approach to reasoning about persistence that fits existing memory-programming models.
+An alternative mechanism to enforce persist order is to flush select cache lines or flush the entire cache, either blocking until all data persists or receiving an acknowledgement/interrupt.
+This model most closely matches existing disk interfaces, where the programmer invokes system calls to write individual pages and then calls a sync system call.
+However, this is a poor match for memory, where the programmer often has little control over how data is laid out (nor do we want programmers to reason about the memory/cache architecture).
+Instead, we would like a more natural approach to reasoning about persistence that fits existing programming models.
 
 Additional questions remain when memory is shared between threads or processes.
 Currently, memory consistency models define how threads communicate and what barriers are necessary to ensure expected behavior.
@@ -32,7 +32,7 @@ Furthermore, persistent memories often care about the actual timing of persists,
 In this case there is no alternative but to block until all data persists.
 These mechanisms are not present in existing consistency models.
 
-While memory consistency models provide a starting point for considering persistent consistency models, the performance differences of volatile memory systems/DRAM and NVRAM will require new programming models for NVRAM.
+While memory consistency models provide a starting point for persistent consistency models, the performance differences of volatile memory systems/DRAM and NVRAM requires new programming models for NVRAM.
 In fact, the consistency and persistence models may be de-coupled.
 That is, the rules that define load and store order might be differ between how \emph{values} are communicated and how \emph{persist order} is enforced.
 
@@ -40,7 +40,7 @@ I wish to extend memory consistency models with persistence semantics to address
 My goals are to determine how multi-threaded consistency interacts with persistence, how to relax persistent consistency models to provide high performance and an easily programmable interfaces, and identify programming patterns likely to cause NVRAM performance bottlenecks alongside potential optimizations.
 All of these will eventually lead to the design of new persistent memory consistency models and implementations, yet that is outside the scope of this project.
 
-The remainder of this chapter describes performance concerns for NVRAM and provides a brief background of memory consistency models before considering simple examples of persistent memory consistency models.
+The remainder of this chapter describes performance concerns for NVRAM and provides a brief background of memory consistency models before considering examples of persistent memory consistency models.
 In addition, I examine previous work, highlighting strengths and weaknesses, and placing it into my persistent memory consistency taxonomy.
 
 \section{Performance}
@@ -50,67 +50,65 @@ Here I describe how I expect NVRAM, the memory system, and the programming model
 Later sections will use these assumptions to reason about consistency model and data structure performance.
 
 There are primarily two cases where persists may cause a thread to stall: ordering barriers and sync barriers.
-Ordering barriers may operate by stalling at the barrier until all previous persists complete, obviously stalling the thread of execution.
-More complex memory systems will allow threads to continue executing ahead of persistent state, using a buffer to store persists (either in the cache or a memory buffer).
+Ordering barriers may operate by stalling execution at the barrier until all previous persists complete.
+More complex memory systems will allow threads to continue executing ahead of persistent state, using a buffer to store persists (in the cache or elsewhere in the memory system), and later persisting in the proper order.
 While decoupling volatile execution state and persistent state removes immediate stalls, these buffers may fill, forcing threads to stall until room becomes available.
-Therefore, persist throughput is the primary concern -- buffers allow threads to execute ahead of persistent state, but the average rate of persist must match the average rate of execution, otherwise stalls necessarily occur.
+Therefore, persist throughput is the primary concern -- buffers allow threads to execute ahead of persistent state, but the average rate of persist must match the average rate of volatile execution, otherwise stalls necessarily occur.
 
-Persist throughput is primarily limited by the number of persist dependencies in an applications.
-NVARM memories will likely allow high throughput so long as persists may occur in parallel.
+Persist throughput is primarily limited by the number of persist dependencies in an application.
+NVRAM memories will likely allow high throughput so long as persists may occur in parallel.
 Persist dependencies reduce parallelism, requiring that some set of writes persist entirely before any dependent persists begin (necessary for proper recovery).
-Since NVRAM cells may take up to microseconds to persists the longest dependence chain of persists will limit persist throughput, additionally limiting execution throughput when buffers fill.
-Persistent memory consistency models stand to improve throughput and reduce stalls by relaxing persist ordering constraints, minimizing the persist critical path to only the persist order dependencies necessary.
+Since NVRAM cells may take up to microseconds to persist, the longest dependence chain of persists will limit persist throughput, additionally limiting execution throughput when buffers fill.
+Persistent memory consistency models stand to improve throughput and reduce stalls by relaxing persist ordering constraints, minimizing the persist critical path to only the persist order dependencies necessary for recovery correctness.
 The ultimate goal is to reduce persist critical path sufficiently that persist throughput exceeds execution throughput, providing the throughput of a DRAM system with the persistence of NVRAM.
 
 Persistent memory applications also introduce stalls at sync barriers.
 These are barriers used when interacting with the outside world (e.g., displaying something on-screen, communicating over the network).
 Unless this external communication can be asynchronously ordered with persists, allowing the thread to continue doing other useful work, the thread must stall for previous persists to complete, reducing throughput.
 Additionally, end-to-end latency is important for many applications and tasks -- greater sync time (while persists drain/flush) leads to increased task latency.
-Again, persist critical path determines sync latency; if all independent writes persist in parallel the time to sync is determined by the longest chain of persists outstanding at the time sync is called.
+Again, persist critical path determines sync latency; if independent writes persist in parallel the time to sync is determined by the longest chain of persists outstanding at the time sync is called.
 
-Finally, a persistent memory consistency model may reduce performance if barriers intended to enforce persists order additionally enforce constraints on volatile execution (e.g., a persist barriers prevents memory instructions to volatile addresses from reordering).
+Finally, a persistent memory consistency model may reduce performance if barriers intended to enforce persist order additionally enforce constraints on volatile execution (e.g., a persist barriers prevents memory instructions to volatile addresses from reordering).
 While I do not discuss this phenomenon further, I would like to investigate its effects in the future and would appreciate feedback.
 
 This chapter will propose persistent memory consistency models to relax persist constraints and improve NVRAM performance.
 First, however, I give a background in existing memory consistency models.
 This motivates why persistent consistency models will be important, what sort of consistency relaxations might improve performance, and what sorts of mechanisms ensure correctness when consistency is relaxed.
-Additionally, whereas persistent memory consistency models determine persist order, we still require volatile memory consistency models to determine execution \emph{values} and to propagate persist order dependencies between threads.
+Additionally, whereas persistent memory consistency models determine persist order, we still require volatile memory consistency models to determine execution values and cross-thread memory dependencies, which propagate persist order dependencies between threads.
 
 \section{Memory consistency models}
 \label{sec:PMC:MemoryConsistency}
 
 This section provides a background on memory consistency models, focusing on two simple models: Sequential Consistency (SC) and Total Store Order (TSO).
 For the remainder of this section I am referring solely to volatile writes without considering for NVRAM persists.
-This discussion assumes that caches are completely coherent -- that is, any two accesses to a cache line (by any core/thread), where at least one access is a store, have a total order.
+This discussion assumes that caches are completely coherent -- that is, any two accesses to a cache line (by any core/thread) have a total order.
 While some relaxed memory models may allow reading of stale cached values, I do not consider that here.
 
-Consistency models define the order that threads observe loads and stores.
+Consistency models define the order of loads and stores observed by threads.
 While every thread observes its own execution in program order, it may appear that remote threads execute out of order.
-Processors (and compilers) are free to reorder instructions to accelerate performance so long as they produce equivalent results.
-When examining a program ordering restrictions can be observed through register and memory dependencies.
-However, it is much more difficult to observe memory dependencies between threads.
+Processors (and compilers) are generally free to reorder instructions to accelerate performance so long as they produce equivalent results assuming no shared memory accesses (single thread execution).
 Loads and stores that are independent from a single-threaded point of view may in fact interact with other threads.
-Reordering these memory accesses can result in unintended program behavior.
+Reordering these memory accesses often results in unintended program behavior.
 
 Two popular solutions to this problem are to 1) force all threads to observe the loads and stores of other threads in a globally defined order (SC) or 2) relax this guarantee, introducing memory barriers that allow the programmer to enforce a certain order when necessary (e.g., TSO).
-While relaxing consistency may provide higher performance, it places a greater burden on the programmer to correctly use memory barriers.
+While relaxing consistency may provide higher performance, it places a greater burden on programmers to be aware of instruction reordering and correctly use memory barriers.
 
 \textbf{Sequential Consistency.}
-Sequential consistency provides the most intuitive programming model, yet necessarily the worst performance (although modern techniques involving speculation provide high performance).
-All loads and stores across threads appear in some globally consistent order that is an interleaving of the program order of all threads.
-There is no need for the programmer to consider that memory instructions might reorder or use memory barriers.
+Sequential consistency provides the most intuitive programming model, yet necessarily the worst performance (although modern techniques involving speculation improve performance).
+All loads and stores appear in a globally consistent order that is an interleaving of program order of all threads.
+The programmer need not consider memory instructions reordering; barriers are unnecessary.
 
 \textbf{Total Store Order.}
 TSO provides greater performance than SC at the cost of requiring the programmer to insert memory barriers.
-Most memory operations are still observed to occur in program order: 1) stores may not reorder with other stores, 2) loads may not reorder with other loads, and 3) a store that occurs after a load may not reorder and appear to occur before that load.
-This guarantees that all stores occur in a globally consistent sequentially order.
+Most memory operations in each thread are still observed to occur in program order: 1) stores may not reorder with other stores, 2) loads may not reorder with other loads, and 3) a store that occurs after a load may not reorder and appear to occur before that load.
+This guarantees that all stores occur in a globally consistent sequential order.
 However, loads that occur after a store in program order may reorder and bypass the store, appearing to occur before the store.
-The justification for doing this is that stores are typically not on the application's critical path -- they simply write into the cache and do not insert delays.
-Loads, on the other hand, may cause delays if they miss in the cache and must execute to a higher level cache or main memory.
-These loads must start as soon as possible to minimize delays.
+The justification for doing this is that stores are typically not on the application's critical path -- they simply write into the cache and do not result in delays.
+Loads, on the other hand, may stall due to cache misses.
+Executing loads as soon as possible minimizes delays.
 
-The programmer is responsible for locating any code where allowing a load to bypass a store causes an incorrect result.
-In this case, a barrier is provided by the architecture to force all loads to delay until the store appears to other threads (or rerun those loads if some other thread stores to those addresses).
+The programmer is responsible for recognizing any code where allowing a load to bypass a store causes an incorrect result.
+In this case, a barrier is provided by the architecture to force all loads to delay until the store appears to other threads (or re-execute those loads if some other thread issues conflicting stores).
 I believe a similar trade off exists for persistence -- in order to gain performance we relax persistence constraints so that persist order may not match program order and may not appear as a valid interleaving of all persists.
 
 \section{Persistent Memory Consistency Models}
@@ -121,7 +119,7 @@ I outline several persistent consistency models, starting with a constrained, st
 The purpose of these models is to provide correctness by defining the allowable persistent states during execution.
 Any implementation may only allow these persistent states.
 Implementations are free to insert further restrictions, disallowing additional persistent states.
-However, specific implementations are outside the scope of this proposal.
+Specific implementations are outside the scope of this proposal.
 I welcome any feedback.
 
 \subsection{Persistent Sequential Consistency}
@@ -129,8 +127,8 @@ I welcome any feedback.
 
 The first model couples persistence to the sequential consistency model as Persistent Sequential Consistency (PSC).
 This model requires that the underlying volatile memory consistency model is sequential consistency.
-All loads and stores (including persists) appear to occur in a globally defined order as an interleaving of valid program orders.
-Whereas volatile memory systems control this solely by controlling the order in which memory actions become visible from each processor, NVRAM used for recovery must treat every point in time as a possible failure, observing the persistent state.
+All loads and stores (including persists) appear to occur in a globally defined order as an interleaving of threads' valid program orders.
+Whereas volatile memory systems provide this solely by controlling the order in which memory actions become visible from each processor, NVRAM used for recovery must treat every point in time as a possible failure, observing the persistent state.
 Achieving a globally consistent persist order requires that persists \emph{actually} occur in-order from each thread, or that sequential batches of persists occur atomically, so that failure may not observe an intermediate state (NVRAM's atomically persistable size is likely to be small -- 8 bytes usually assumed).
 Additionally, all data sharing propagates ordering dependencies between persists.
 
@@ -172,60 +170,61 @@ Assuming threads execute under a sequential consistency model (i.e., they observ
 Doing so would violate the model by allowing thread 1 to observe a persist from thread 2 (B=1) and then persist an additional value before B persists.
 Even if the program executes according to SC, persistence order must also be observed.
 
-A strict implementation of PSC would require that all persists occur before a thread makes any further progress -- volatile execution is coupled to persistent execution.
+A strict implementation of PSC requires that all persists occur before each thread makes any further progress -- volatile execution is coupled to persistent execution.
 This strict model does not require a sync barrier.
 A slight relaxation allows volatile state to advance ahead of persistent state, so long as (1) both the volatile and nonvolatile state are valid sequential executions, and (2) the persistent state matches some previous volatile state.
-This optimization does require a sync barrier; when communicating with the outside world persistent state must catch up with volatile state.
+This optimization does require a sync barrier; communicating with the outside world requires persistent state catch up with volatile state.
 
 The problem with PSC is that all persists within a thread are ordered, and all shared memory accesses additionally order persists.
 This is also what makes PSC the most intuitive programming model.
 When persist latency is large (expected to be at least hundreds of nanoseconds up to several microseconds) every persist incurs this penalty; there is no opportunity to execute persists from the same thread in parallel.
-The next model relaxes the multi-threaded constraint.
+The next model relaxes the multi-threaded persist-order constraints.
 
 \subsection{Local Persist Order}
 \label{sec:PMC:PersistenceModels:LPO}
 
-This model considers that thread communication and data persistence should not always occur at the same granularity.
+This model allows thread communication and data persistence to occur at different granularities.
 Imagine, as an example, the \GroupCommit design from Section~\ref{sec:OLTP_design:GroupCommit}.
 In this design I required a volatile staging buffer, separate from the primary NVRAM store, where batch updates occur.
 Only at the end of the batch would I copy the original batch data to an undo log and persist batch updates in-place to NVRAM.
 An alternative design omits this staging buffer by allowing updates during a batch to persist directly to the NVRAM address space.
-However, each update must first check if the address region being modified is protected by a segment of the undo log, and if it is not create and persist the necessary undo first.
-Once a regions of memory are protected by undo, threads may update the NVRAM store in-place for the remainder of the batch without considering the order that data persists, even when data sharing occurs..
-When the batch ends all transactions quiesce and the NVRAM store must necessarily arrive at the final persistent version of the batch before transactions commit.
+However, each update must first check if the address region being modified is protected by a segment of the undo log, and if it is not first create and persist the necessary undo.
+Once a region of memory is protected by undo, threads may update the NVRAM store in-place for the remainder of the batch without considering the order in which data persists.
+At the end of the batch the batch manager enforces that the last version of data persists before invalidating the log and allowing transactions to commit.
 
 Consider this design under PSC -- all persists within a thread occur in-order, and whenever data is shared a persist order is enforced.
 However, there is no need to enforce a persist order across threads except with respect to individual memory addresses.
-Data to different addresses may persist in any order so long as 1) associated undo log persists first and 2) the batch manager receives proper acknowledgement at the end of the batch that all data has successfully persisted.
+Data to different addresses may persist in any order so long as 1) associated undo log persists first and 2) the batch manager receives proper acknowledgement at the end of the batch that latest data versions have successfully persisted.
 Additional cross-thread dependences introduce unnecessary persist-order constraints that increase the critical path of persists, limiting persist throughput.
 
 I relax cross-thread dependences in a model called \emph{Local Persist Order} (LPO).
 All persists within a thread continue to execute in-order, as in sequential consistency.
-The persistent state at any point in time represents correct execution according to the underlying consistency model (which can be SC, TSO, etc.).
-However, each thread may progress persistent state to various degrees in ways that violates PSC.
+However, each thread may progress persistent state to various degrees, violating persistent sequential consistency; memory sharing does not enforce a persist-order dependence.
 For example, again considering Figure~\ref{fig:PSC}.
 It is now possible to observe A=1, C=1, but B=0.
 This occurs if volatile execution observes thread 2 executing entirely before thread 1, but thread 1 persists entirely before thread 2 (which is allowed according to LPO).
 
 The previous situation may be avoided by using explicit persist barriers, which are necessary to enforce persist order between threads.
 There are many types of barriers, with varying implementations.
-I will simply highlight a few here.
+I highlight a few here.
 A thread may enforce that all local persists occur before persists from other threads that read the local values.
 Such \emph{persist order-before} barriers are useful for communicating persistence to another thread.
 A thread may enforce that all remote persists occur before subsequent local persists in a \emph{persist order-after}, useful for reading persists from remote threads.
-Both of these may be combined in a \emph{persist total-order}, allowing a thread to completely order all persistent actions with other threads.
+Both of these may be combined in a \emph{persist total-order}, allowing a thread to completely order all persistent updates with other threads.
 While these define persistent state, execution still relies on an underlying consistency model to determine what values are communicated and which threads interact.
 
 The batching example might enforce batch persistence by having all transaction threads access some pre-determined memory address and emitting a \emph{persist order-before} at the end of the batch.
 Once the batch manager is certain all threads have accessed this memory it accesses the pre-determined memory address itself and inserts a \emph{persist order-after}, ordering the persists from all other threads before any subsequent persists from the batch manager.
 The batch manager is then free to invalidate the log, committing the batch.
 The use of persist barriers ensures that all store data persists before the batch commits, but during batch execution extraneous cross-thread persist dependences do not limit execution.
+By using a relaxed persistent memory consistency model we are able to design a more intuitive batching system (no longer requiring a volatile staging buffer) and improve persist performance.
+Additionally, data persists while the batch executes, minimizing inter-batch delays.
 
 \input{PMC/Fig.LPO.tex}
-LPO potentially improves performance by minimizing the critical path of persist dependencies, shown in Figure~\ref{figure:LPO}
+LPO potentially improves performance by minimizing the critical path of persist dependencies, shown in Figure~\ref{figure:LPO}.
 Data sharing and the resulting cross-thread persist dependencies increase the critical path of persists.
 Even with buffering and high performance NVRAM memory systems that allow persists to buffer while threads continue, such chains limit throughput buffers become full, or increase delays caused by syncs while the buffers flush in persist-dependence order.
-Since threads persist independently (except where persist barriers are placed), adding more threads provides more persist throughput, similarly to Symmetric Multi Threading (SMT), which provides memory parallelism on existing systems.
+Since threads persist independently (except where persist barriers are placed), adding threads provides additional persist throughput, similarly to Symmetric Multi Threading (SMT), which provides memory parallelism on existing systems.
 However, the need to perform all persists in serial within a thread remains a concern.
 The Byte Addressable File System (BPFS) addresses intra-thread persist dependencies by introducing additional persist barriers.
 
@@ -234,7 +233,8 @@ The Byte Addressable File System (BPFS) addresses intra-thread persist dependenc
 
 The Byte Addressable Persistent File System (BPFS) \cite{ConditNightingale09} is the de-facto standard for existing persistent memory consistency models, used additionally by \cite{CoburnCaulfield11, FangHsiao11, VenkataramanTolia11}.
 Threads persist by writing to the persistent address space, enforcing persist order via \emph{epoch barriers} which divide persists into \emph{epochs}.
-BPFS additionally provides a hardware design, enforcing persist order with only cache modifications (little additionally buffering or modifications to the memory system).
+Persists may not reorder across epoch barriers, but persists within an epoch are free to execute in parallel.
+BPFS additionally provides a hardware design, enforcing persist order with only cache modifications (little additional buffering or modifications to the memory system).
 A table of epochs is kept in the cache of each CPU, with each cache line keeping track of its persist epoch number and process/thread ID.
 The cache writes back in the background, making sure that each epoch persists completely before starting to flush the next epoch.
 
@@ -249,7 +249,7 @@ Consider the ARIES log from Chapter~\ref{chap:OLTP_design}, demonstrated in \tex
 Persisting a single entry requires first persisting the entry's body, followed by the tail LSN.
 Most log entries are large (at least 100 bytes), containing information about the transaction, store, page, tuple, and action taken.
 According to PSC and LPO all persists (8 byte segments) to the log entry body must occur in order -- an unnecessary constraint that increases persist critical path.
-Instead, BPFS allows the entire log entry body to persist in parallel, and enforces that the body persists before the LSN using a persist barrier.
+Instead, BPFS allows the entire log entry body to persist in parallel, and guarantees that the body persists before the LSN using a persist barrier.
 
 In consistency terms BPFS attempts to produce a total ordering of epochs that all threads observe (Total Epoch Order -- TEO -- would be a great name for this model).
 This ordering resembles transactional memory -- producing a total order on memory transactions -- except BPFS does not provide conncurrenty control (transactions can not abort).
@@ -296,19 +296,21 @@ Consider Figure~\ref{fig:BPFS_deadlock}.
 Each thread runs a single epoch with two persists to shared memory.
 The second thread executes these persists in opposite order of the first.
 If thread 1 writes to A at the same time thread 2 writes to B a deadlock occurs.
-Thread 1 attempts to write to B, fetching the cache line for B, realizing that thread 2 has not yet persisted, so thread 1's epoch must be ordered after thread 2's epoch.
+Thread 1 next attempts to write to B, fetching the cache line for B, and observes that thread 2 has not yet persisted, so thread 1's epoch must be ordered after thread 2's epoch.
 Similarly, thread 2 attempts to write to A, ordering its epoch after thread 1's; a cycle has occurred, preventing forward progress.
 
 This problem may occur even without data races or when persists have a total order.
 Imagine that A and B on each thread are different variables, each protected by locks, but that thread 1's A (B) is on the same \emph{cache line} as thread 2's A (B).
-Such \emph{false sharing} may result in performance problems for existing volatile cache systems, but in the case of BPFS produces deadlock.
+Such \emph{false sharing} results in performance problems for existing volatile cache systems, but in the case of NVRAM and BPFS produces deadlock.
 Furthermore, one might try to solve this problem by reordering thread 2's writes so that both thread 1 and thread 2 write in the same order, totally ordering the epochs (whoever accesses A first runs to completion while the other stalls).
 However, relaxed consistency models allow the processor (or compiler) to reorder writes and persists within an epoch, arriving at the original problem.
 In fact, it is not clear if instructions accessing only volatile data are permitted (or should be permitted) to reorder across epoch boundaries.
+Next, A and B may represent synchronization races; consider atomic read-modify-write (such as compare-and-swap) to persistent address spaces.
+BPFS, in assuming no races to persistent data, restricts the use of persistent locks.
 Finally, certain data structures may specifically intend to allow races within persist epochs.
 The \GroupCommit implementation described above, for example, requires threads to work concurrently towards a persistent state.
 
-BPFS attempts to produce a total order on all epoch barriers, producing deadlocks and preventing useful programming patterns.
+BPFS attempts to produce a total order of all epochs, producing deadlocks and preventing useful programming patterns.
 I believe that the solution is to better define the interaction between persistence and the consistency model.
 I next introduce a model strongly influenced by BPFS but that allows concurrent epochs to make forward progress at the cost of a slightly less intuitive interface.
 
@@ -375,12 +377,12 @@ Thread 2's persist to A must persist before thread 2's persist to E.
 The converse is not true -- thread 2's persist to B need not persist before thread 1's persist to D.
 This model produces a single partial ordering of persist epochs that all threads observe.
 
-It is unclear to me if volatile and non-memory instructions should be allowed to reorder with persist epoch barriers.
+It is unclear to me if volatile memory and non-memory instructions should be allowed to reorder with persist epoch barriers.
 This will depend on the actual implementation, and if the hardware is able to easily distinguish persists from nonvolatile writes.
-For example, thread 2's read to C in the previous example should be allowed to occur before the persist to B so long as the correct persist order is enforced.
+For example, thread 2's read to C in the previous example should be allowed to occur before the persist to B so long as the correct epoch order is enforced.
 
 PEO provides effective single-thread persist parallelism while providing a relatively intuitive model for cross-thread persist-order dependencies.
-While not as intuitive as BPFS (total epoch order), PEO prevents deadlock and allows concurrent access to shared persistent memory spaces without enforcing a persist order when this is the desired behavior.
+While not as intuitive as BPFS (total epoch order), PEO prevents deadlock and allows concurrent access to shared persistent memory spaces without enforcing a persist order if this is the desired behavior.
 
 \section{Conclusion}
 \label{sec:PMC:Conclusion}

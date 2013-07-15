@@ -23,7 +23,7 @@ I analyze traces at cache line (64 bytes) and page (8KB) granularity.
 These traces provide insight into how Shore-MT accesses persistent data, summarized in Table~\ref{table::AccessCharacteristics}.
 Index accesses represent the great majority of cache line accesses, averaging 84\% of accesses to NVRAM across workloads.
 Any caching efforts should focus primarily on index pages and cache lines.
-Note also that indices access a greater number of cache lines per page access than other page types (average 11.54 vs 5.20 per store and 3.39 per other page types), suggesting that uncached index page accesses have the potential to introduce greater delays. 
+Note also that indeces access a greater number of cache lines per page access than other page types (average 11.54 vs 5.20 per store and 3.39 per other page types), suggesting that uncached index page accesses have the potential to introduce greater delays. 
 
 \textbf{Throughput.}
 \input{OLTP_eval/Fig.ReadPerformance.tex}
@@ -57,7 +57,7 @@ TATP experiences a decrease in misses only in index pages, whereas TPCB and TPCC
 
 While the behavior is specific to each workload, the results represent trends applicable to most databases and workloads, specifically, index accesses and append-heavy tables.
 First, all workloads see a decrease in index page misses as soon as B+Tree roots (accessed on every traversal) successfully cache.
-The hierarchical nature of B+Tree indices allows high levels of the tree to cache effectively for even a small cache capacity.
+The hierarchical nature of B+Tree indexes allows high levels of the tree to cache effectively for even a small cache capacity.
 Additionally, TPCB and TPCC contain history tables to which data are primarily appended.
 Transactions append to the same page as previous transactions, allowing such tables to cache effectively.
 Similarly, extent map pages used for allocating new pages and locating pages to append into are frequently accessed and likely to cache.
@@ -104,7 +104,7 @@ Several factors increase persist barrier latency, including ordering persists ac
 I consider the effect of persist barrier latency on transaction processing throughput to determine if and when new NVRAM technologies warrant redesigning recovery management.
 
 Refer to Sections~\ref{sec:OLTP_design:Design} and~\ref{sec:OLTP_design:Methodology} for a more thorough description of recovery mechanisms and experimental setup.
-All experiments throttle persist bandwidth to 1.5GB/s, which I believe to be conservative (possible with PCIe-attached flash).
+All experiments throttle persist bandwidth to 1.5GB/s, which I believe to be conservative (possible with PCIe-attached Flash).
 Ideally, NVRAM will provide fast enough accesses to use \InPlace.
 However, one would expect \InPlace's performance to suffer at large persist barrier latencies, requiring either \NVDisk or \GroupCommit to regain throughput.
 
@@ -202,7 +202,7 @@ Between batches however, all logs and store data persists, placing huge requirem
 I intend to include a quantitative study of this behavior.
 
 \textbf{Device lifetime.}
-NVRAM technologies, much like flash memory currently, will have limited write endurance; each cell may only be reliably written to a finite number of times.
+NVRAM technologies, much like Flash memory currently, will have limited write endurance; each cell may only be reliably written to a finite number of times.
 Previous work suggests hardware techniques to evenly spread writes amongst cells.
 The recovery mechanisms presented here each produce varying persist rates with different abilities to naturally spread persists across addresses/cells.
 I intend to study expected device lifetime for each recovery mechanism, both assuming that persists to an address always persist to the same cell, and assuming hardware that evenly spreads persists across cells.

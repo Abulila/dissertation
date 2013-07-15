@@ -4,7 +4,7 @@ I worked on this project with my advisor, Thomas F. Wenisch, and assistant profe
 Working under their advisement, I was the sole graduate student and technical contributor (database and programming effort).
 Refer to Sections~\ref{sec:Background:Storage} and~\ref{sec:Background:Analytics} for necessary background on this topic.
 While the project ended in a negative result, it was instrumental developing my understanding of databases and storage management.
-After completing this work I moved from considering flash to emerging NVRAM technologies; I propose no future work or extensions to this chapter.
+After completing this work I moved from considering Flash to emerging NVRAM technologies; I propose no future work or extensions to this chapter.
 
 \section{Introduction}
 \label{sec:FlashOpti:Intro}
@@ -26,9 +26,9 @@ The recent literature \cite{Baumann2010} suggests that on SSDs, optimizers shoul
 Furthermore, as SSDs change the relative costs of computation, sequential, and random IO, the relative performance of alternative join algorithms should be re-examined, and optimizer cost models updated.
 
 My original intent was to leverage this idea to 1) improve query optimization by making device-specific decisions, and 2) accelerate database analytics and reduce operating costs by intelligently placing data on different devices.
-While flash is faster than disk, it is generally more expensive per equal capacity.
-It makes sense to place small amounts of frequently accessed data on flash, and the rest on disk.
-Furthermore some data ``prefers" to live on flash as it is accessed in ways that flash can take advantage of (e.g., queries typically access this data in selectivities or join types that prefer flash).
+While Flash is faster than disk, it is generally more expensive per equal capacity.
+It makes sense to place small amounts of frequently accessed data on Flash, and the rest on disk.
+Furthermore some data ``prefers" to live on Flash as it is accessed in ways that Flash can take advantage of (e.g., queries typically access this data in selectivities or join types that prefer Flash).
 
 Despite this intuition, my empirical investigation using a commercial DBMS finds \emph{it is not necessary to make any adjustments to the query optimizer when moving data from disk to Flash}---an SSD-oblivious optimizer generally makes effective choices.
 I demonstrate this result, and explore why it is the case, in two steps.
@@ -90,7 +90,7 @@ Both crossover points shift in the expected directions.
 The slope of the index scan curve is considerably shallower, and the break-even with the relation scan shifts above 0.5\% selectivity.  
 Furthermore, the range in which rowid-sort scan is optimal becomes narrower.
 Nevertheless, the key take-away is that the range of selectivities for which the optimal scan \emph{differs} across SSD and Disk is vanishingly small.
-Only a minute fraction of queries fit into this range, and those that make the incorrect decision (between disk and flash) see a small performance impact.
+Only a minute fraction of queries fit into this range, and those that make the incorrect decision (between disk and Flash) see a small performance impact.
 Hence, it is unnecessary for the optimizer to be SSD-aware to choose the correct scan operation.
 
 Whereas these measurements demonstrate my main result, they do not explain why index scans fail to leverage the random access advantage of Flash.  

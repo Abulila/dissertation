@@ -5,7 +5,7 @@ The purpose of discussing database optimizations is to understand the complicati
 \section{Storage Technologies}
 \label{sec:Background:Storage}
 
-I start with a survey of storage technologies including disk, flash, and upcoming NVRAM.
+I start with a survey of storage technologies including disk, Flash, and upcoming NVRAM.
 For each, I provide the operating principles and interesting technological trends.
 
 \input{Background/tab.devices.tex}
@@ -53,7 +53,7 @@ Unlike disks, where each random read incurs mechanical delays (disk head seek an
 \label{sec:Background:Storage:NVRAM}
 
 Nonvolatile memories will soon be commonplace.
-Technology trends suggest that DRAM and flash memory may cease to scale, requiring new dense memory technologies \cite{LeeIpek09}.
+Technology trends suggest that DRAM and Flash memory may cease to scale, requiring new dense memory technologies \cite{LeeIpek09}.
 
 \textbf{Memory technology characteristics.}
 Numerous technologies offer durable byte-addressable access.
@@ -65,13 +65,13 @@ In particular, NVRAMs will likely provide somewhat higher access latency relativ
 Furthermore, several technologies are expected to have asymmetric read-write latencies, where writing to the device may take several microseconds \cite{QureshiSrinivasan09}.
 Write latency worsens with MLC, where slow, iterative writes are necessary to reliably write to a cell.
 
-Similarly to flash, resistive NVRAM technologies suffer from limited write endurance; cells may be written reliably only a limited number of times.
+Similarly to Flash, resistive NVRAM technologies suffer from limited write endurance; cells may be written reliably only a limited number of times.
 Previously proposed hardware mechanisms (e.g., Start-Gap \cite{QureshiKaridis09}) are highly effective in distributing writes across cells and can mitigate write endurance concerns.
 While such work focuses on volatile applications (NVRAM as a DRAM main memory substitute), it may be extended to durable uses.
 
 \textbf{NVRAM storage architectures.}
 Future database systems may incorporate NVRAM in a variety of ways.
-At one extreme, NVRAM can be deployed as a disk or flash SSD replacement.
+At one extreme, NVRAM can be deployed as a disk or Flash SSD replacement.
 While safe, cost-effective, and backwards compatible, the traditional disk interface imposes overheads.
 Prior work demonstrates that file system and disk controller latencies dominate NVRAM access times \cite{CaulfieldDe10}.
 Furthermore, block access negates advantages of byte addressability.
@@ -88,7 +88,7 @@ NVRAM will eventually connect via a memory interface, but it is unclear how stor
 \label{sec:Background:Analytics}
 
 Large scale data processing requires efficient use of storage devices.
-I discuss two important operators within the relational model most affected by flash's performance characteristics: scans and joins.
+I discuss two important operators within the relational model most affected by Flash's performance characteristics: scans and joins.
 
 \subsection{Scans}
 \label{sec:Background:Scans}
@@ -138,7 +138,7 @@ Seek and random/sequential transfer times are central parameters of this model, 
 
 As accessing large amounts of data on disk can limit system throughput, it is imperative that the query optimizer choose the best query plan.
 Typical query optimizers use data statistics to approximate query selectivity and cardinality as well as physically-based models to estimate the runtime of candidate query plans.
-Sections~\ref{sec:FlashOpti:Scans} and~\ref{sec:FlashOpti:Joins} will investigate when the query plan changes between disk and flash, and what performance is lost when the incorrect decision is made (i.e., when optimizing for disk but actually using flash).
+Sections~\ref{sec:FlashOpti:Scans} and~\ref{sec:FlashOpti:Joins} will investigate when the query plan changes between disk and Flash, and what performance is lost when the incorrect decision is made (i.e., when optimizing for disk but actually using Flash).
 
 \section{Durable and Recoverable Transactions}
 \label{sec:Background:Recovery}

@@ -5,7 +5,7 @@ Flash memory, primarily used for mobile storage, has gained traction as a high-p
 Nonvolatile Random Access Memories (NVRAM), such as phase change memory and spin-transfer torque RAM, have emerged as high performance storage alternatives \cite{BurrKurdi08}.
 
 These technologies offer significant performance improvements over disk, while still providing durability with great storage capacity.
-As drop-in replacements for disk, flash and NVRAM accelerate storage access.
+As drop-in replacements for disk, Flash and NVRAM accelerate storage access.
 However, the disk interface fails to leverage specific device characteristics.
 
 This thesis investigates how several data-centric workloads interact with future storage technologies, the relevant software and algorithms, and in some instances computer hardware.
@@ -19,20 +19,20 @@ I match each workload to the emerging storage technology that suits it best and 
 Analytics relies on disk to provide enormous data capacity.
 Typical analytics work-flow involves taking a snapshot of data from an online database and mining this data for complex, yet useful, patterns.
 While applications do not rely on disk's durability for recovery (in fact, instances that reasonably fit in main memory have no need for disk), modern analytics data sets reach peta-byte scale \cite{Economist10}, and accessing such large data quickly becomes the dominant bottleneck.
-Such capacity is only reasonably achieved by dense disk and flash memory.
+Such capacity is only reasonably achieved by dense disk and Flash memory.
 
 Decades of research have provided modern analytics databases with tools to minimize storage accesses, particularly slow random accesses (e.g., disk-specific indexes, join algorithms to minimize page access and produce large sequential runs).
-Whereas these optimizations are still effective for flash, they fail to fully leverage flash's ability to read randomly located data quickly, or properly account for flash's higher throughput reads than writes.
+Whereas these optimizations are still effective for Flash, they fail to fully leverage Flash's ability to read randomly located data quickly, or properly account for Flash's higher throughput reads than writes.
 As examples, I consider access paths (various scan types) and join algorithms.
 A rule of thumb for scans is that an index should be used when less than 10\% of tuples in a table are returned, otherwise the entire table should be scanned.
 The intuition is that locating tuples from an index requires random reads as well as reading additional pages from the index itself.
-One would expect this selectivity (10\%) to increase when replacing disk with flash -- flash is no longer penalized by random reads, and so prefers access paths which minimize total page accesses.
-Similarly, different ad hoc join algorithms (those that do not use indexes: block-nested loops, sort-merge join, and hybrid-hash join) present different storage access patterns and may be variably suited to disk and flash.
+One would expect this selectivity (10\%) to increase when replacing disk with Flash -- Flash is no longer penalized by random reads, and so prefers access paths which minimize total page accesses.
+Similarly, different ad hoc join algorithms (those that do not use indexes: block-nested loops, sort-merge join, and hybrid-hash join) present different storage access patterns and may be variably suited to disk and Flash.
 
 My results, originally presented in ADMS 2010 \cite{PelleyWenisch11} and discussed in Chapter~\ref{chap:FlashOpti}, show that while both previous hypotheses are correct, their significance is negligible.
-Optimal access path (index vs table scan) only changes between disk and flash for a small range of query selectivities, and queries within that range see only a small performance improvement.
-Additionally, join algorithm choice makes little difference, as optimized join algorithms exhibit nearly balanced read and write capacity in large sequential runs -- join algorithms optimized for disk are already optimized for flash.
-I conclude that the page-oriented nature of flash limits further analytics-flash optimization.
+Optimal access path (index vs table scan) only changes between disk and Flash for a small range of query selectivities, and queries within that range see only a small performance improvement.
+Additionally, join algorithm choice makes little difference, as optimized join algorithms exhibit nearly balanced read and write capacity in large sequential runs -- join algorithms optimized for disk are already optimized for Flash.
+I conclude that the page-oriented nature of Flash limits further analytics-Flash optimization.
 Next, I turn to NVRAM's possible database uses.
 
 \section{Transaction Processing}

@@ -30,10 +30,10 @@ Figure~\ref{fig::Recovery} demonstrates this potential, displaying recovery time
 \input{OLTP_design/Fig.Recovery.tex}
 
 The ARIES/WAL points (black circles) in the Figure show forward-processing throughput (horizontal axis) and recovery time (vertical axis) as a function of device write throughput (annotated alongside each point).
-As database throughput can greatly outpace existing storage devices (this configuration requires 6,000 page writes/s to bound recovery at maximum transaction throughput; measured disk and flash devices provide only 190 and 2,500 page writes/s, respectively) I model recovery performance under faster NVRAM using a RAM disk for log and store while limiting the page flush rate.
+As database throughput can greatly outpace existing storage devices (this configuration requires 6,000 page writes/s to bound recovery at maximum transaction throughput; measured disk and Flash devices provide only 190 and 2,500 page writes/s, respectively) I model recovery performance under faster NVRAM using a RAM disk for log and store while limiting the page flush rate.
 As intuition would suggest, greater write bandwidth enables more aggressive flushing, minimizing the number of dirtied pages in the buffer cache at the time of failure, in turn reducing recovery time.
 With enough write bandwidth (in this case, 127,000 flushes/s, or 0.97 GB/s random writes for 8KB pages) the database recovers near-instantly, but forward-processing performance remains compute bound.
-Achieving such throughput today requires large, expensive disk arrays or enterprise flash storage devices; future NVRAM devices might enable similar performance on commodity systems.
+Achieving such throughput today requires large, expensive disk arrays or enterprise Flash storage devices; future NVRAM devices might enable similar performance on commodity systems.
 
 NVRAM opens up even more exciting opportunities for recovery management if we consider re-architecting database software.
 The Figure shows this additional potential with a design point (red triangle) that removes WAL and asynchronous page flushing---optimizations primarily designed to hide disk latency.
@@ -57,7 +57,7 @@ Subsequent chapters will build on the designs and methodology presented here to 
 
 \input{OLTP_design/Fig.DesignSpace.tex}
 
-Upcoming NVRAM devices will undoubtedly be faster than both disk and flash.
+Upcoming NVRAM devices will undoubtedly be faster than both disk and Flash.
 However, compared to DRAM many NVRAM technologies impose slower reads and significantly slower persistent writes.
 both must be considered in redesigning OLTP for NVRAM.
 
@@ -405,15 +405,15 @@ Recently, researchers have begun to focus specifically on databases as a useful 
 Chen \emph{et al.} reconsider database algorithms and data structures to address NVRAM's write latency, endurance, and write energy concerns, generally aiming to reduce the number of modified NVRAM bits \cite{ChenGibbons11}.
 However, their work does not consider durable consistency for transaction processing.
 Venkataraman \emph{et al.} demonstrate a multi-versioned log-free B-Tree for use with NVRAM \cite{VenkataramanTolia11}.
-Indices are updated in place, similarly to my \InPlace, without requiring any logging (physical or otherwise) and while providing snap shot reads.
+Indexes are updated in place, similarly to my \InPlace, without requiring any logging (physical or otherwise) and while providing snap shot reads.
 This work considers durability management at a higher level, user transactions, and consistency throughout the entire database.
 Finally, Fang \emph{et al.} develop a new WAL infrastructure for NVRAM that leverages byte addressable and persistent access \cite{FangHsiao11}.
 Fang aims to improve transaction throughput but retains centralized logging.
 I distinguish myself by investigating how NVRAM write performance guides database and recovery design more generally.
 
-While different than byte addressable NVRAMs, flash memory has become an important storage medium.
-Similar in theme to this work, numerous authors have considered designing databases specifically for flash (\cite{BernsteinReid11}, \cite{SarwatMokbel11}).
-NVRAM, unlike flash, allows more efficient in-place updates through byte-addressability, low persist latency, and atomic persists.
+While different than byte addressable NVRAMs, Flash memory has become an important storage medium.
+Similar in theme to this work, numerous authors have considered designing databases specifically for Flash (\cite{BernsteinReid11}, \cite{SarwatMokbel11}).
+NVRAM, unlike Flash, allows more efficient in-place updates through byte-addressability, low persist latency, and atomic persists.
 
 Prior work (e.g., H-Store \cite{StonebrakerMadden07}) has suggested highly available systems as an outright replacement for durability.
 I argue that computers and storage systems will always fail, and durability remains a requirement for many applications.
