@@ -7,8 +7,8 @@ I would especially like the thank Brian and Bill for bringing industry's point o
 
 This chapter outlines the problems with existing disk recovery management, the potential pitfalls of using NVRAM for persistent applications, a methodology for evaluating NVRAM devices that do not yet exist, and a description of several candidate software designs for NVRAM recovery management, to be evaluated later.
 I consider this chapter largely complete with two exceptions.
-First, I have performed a validation of my timing model that has not yet been published that I intend to include in the final thesis \ref{sec:OLTP_design:Methodology:Proposed}.
-Second, my implementation of \GroupCommit is more complex (and interesting, in my opinion) than a 12 page journal paper allows room to describe.
+First, I have validated my timing model and intend to include results in the final thesis \ref{sec:OLTP_design:Methodology:Proposed}.
+Second, my implementation of \GroupCommit is more complex than a 12 page journal paper allows room to describe.
 I intend to include a detailed description in Section~\ref{sec::OLTP_design:GroupCommit:Proposed}.
 
 \section{Introduction}
@@ -31,14 +31,14 @@ Figure~\ref{fig::Recovery} demonstrates this potential, displaying recovery time
 
 The ARIES/WAL points (black circles) in the Figure show forward-processing throughput (horizontal axis) and recovery time (vertical axis) as a function of device write throughput (annotated alongside each point).
 As database throughput can greatly outpace existing storage devices (this configuration requires 6,000 page writes/s to bound recovery at maximum transaction throughput; measured disk and flash devices provide only 190 and 2,500 page writes/s, respectively) I model recovery performance under faster NVRAM using a RAM disk for log and store while limiting the page flush rate.
-As intuition would suggest, greater write bandwidth enables more aggressive flushing, minimizing the number of dirtied pages in the buffer cache at the time of failure, reducing recovery time.
+As intuition would suggest, greater write bandwidth enables more aggressive flushing, minimizing the number of dirtied pages in the buffer cache at the time of failure, in turn reducing recovery time.
 With enough write bandwidth (in this case, 127,000 flushes/s, or 0.97 GB/s random writes for 8KB pages) the database recovers near-instantly, but forward-processing performance remains compute bound.
 Achieving such throughput today requires large, expensive disk arrays or enterprise flash storage devices; future NVRAM devices might enable similar performance on commodity systems.
 
 NVRAM opens up even more exciting opportunities for recovery management if we consider re-architecting database software.
 The Figure shows this additional potential with a design point (red triangle) that removes WAL and asynchronous page flushing---optimizations primarily designed to hide disk latency.
 Throughput improves due to three effects: (1) threads previously occupied by page and log flushers become available to serve additional transactions, (2) asynchronous page flushing, which interferes with transactions as both flusher and transaction threads latch frequently accessed pages, is removed, and (3) transactions no longer insert WAL log entries, reducing the transaction code path.
-In aggregate these simplifications amount to a 50\% throughput increase over ARIES's best possible NVRAM performance.
+In aggregate these simplifications amount to a 50\% throughput increase over ARIES's instantaneous-recovery NVRAM performance.
 The key take-away is that database optimizations long used for disk only hinder performance with faster devices.
 In this chapter, I investigate how to redesign durable storage and recovery management for OLTP to take advantage of the low latency and byte-addressability of NVRAM.
 
@@ -47,9 +47,9 @@ Se\-veral candidate NVRAM technologies exhibit larger read latency and significa
 Additionally, whereas DRAM writes benefit from caching and typically are not on applications' critical paths, NVRAM writes must become persistent in a constrained order to ensure correct recovery.
 I consider an NVRAM access model where correct ordering of persistent writes is enforced via \emph{persist barriers}, which stall until preceding NVRAM writes are complete; such persist barriers can introduce substantial delays when NVRAM writes are slow.
 
-This chapter outlines an approach to architecting recovery management for transaction processing using NVRAM technologies
-I discuss potential performance problems with using NVRAM and possible software architectures to address these problems.
-Additionally, I propose an evaluation framework, involving memory trace analysis, code annotation, and precise timing models for OLTP running on existing hardware platforms.
+This chapter outlines an approach to architecting recovery management for transaction processing using NVRAM technologies.
+I discuss potential performance concerns for both disk and NVRAM, proposing software designs to address these problems.
+Additionally, I outline an NVRAM performance evaluation framework, involving memory trace analysis, code annotation, and precise timing models for OLTP running on existing hardware platforms.
 Subsequent chapters will build on the designs and methodology presented here to determine when OLTP must be redesigned and what problems might remain.
 
 \section{Recovery Management Design}
@@ -57,7 +57,7 @@ Subsequent chapters will build on the designs and methodology presented here to 
 
 \input{OLTP_design/Fig.DesignSpace.tex}
 
-Near-future NVRAM devices will undoubtedly be faster than both disk and flash.
+Upcoming NVRAM devices will undoubtedly be faster than both disk and flash.
 However, compared to DRAM many NVRAM technologies impose slower reads and significantly slower persistent writes.
 both must be considered in redesigning OLTP for NVRAM.
 
@@ -90,23 +90,23 @@ BPFS provides an example implementation of this mechanism \cite{ConditNightingal
 Regardless of how they are implemented, persist barriers can introduce expensive synchronous delays on transaction threads; the optimal recovery mechanism depends on how expensive, on average, persist barriers become.
 To better understand how persist barriers are used and how frequently they occur, I outline operations to atomically update persistent data using persist barriers, and use these operations to implement three recovery mechanisms for NVRAM.
 
-\textbf{Atomic durable updates.}
 \input{OLTP_design/Fig.Code.tex}
+\textbf{Atomic durable updates.}
 Figure~\ref{fig::Code} shows two operations to atomically update NVRAM data.
 The first, \texttt{persist\_wal()}, persists log entries into an ARIES log.
 Sho\-re-MT log entries are post-pended with their Log Serial Number (LSN -- log entry file offset).
-At recovery, a log entry is considered valid only if this tail LSN matches the location of the entry.
-I persist log entries atomically by first persisting an entry without its tail LSN, and only later (once certain the entry is persistent) persist the LSN.
+At recovery, a log entry is considered valid only if this tail LSN matches the starting location of the entry.
+I persist log entries atomically by first persisting an entry without its tail LSN, and only later (once certain the entry is persistent) persisting the LSN.
 This order is enforced by inserting a persist barrier between writing the log entry and its LSN.
 Additionally, I reduce the number of persist barriers by persisting entries in batches, writing several log entries at once (without LSNs), followed by all their LSNs, separated by a single persist barrier.
 It is entirely possible (yet unlikely) that pre-existing LSN tails already match the log entry's offset; tails must be checked and first reset when this occurs.
 Log operations introduce two persist barriers---one to ensure that log entries persist before their LSNs, and one to enforce that LSNs persist before the thread continues executing.
 
 The second operation, \texttt{persist\_page()}, atomically persists page data with the use of a persistent undo page log.
-First, the page's original data is copied from NVRAM to the page log.
-The page log is marked valid and the dirty version of the page is copied to NVRAM (or updated in-place while locks are held).
+First, the page's original data is copied from the NVRAM page to the page log.
+The page log is persistently marked valid and the dirty version of the page is copied to NVRAM (updated in-place while locks are held).
 Finally, the log is marked invalid.
-Four persist barriers ensure that each update persists before the next, enforcing consistency at all points in execution.
+Four persist barriers ensure that each update persists before the next, ensuring consistent, persistent state at all points in execution.
 Recovery checks the valid flags of all page logs, copying any valid log back in-place.
 The log is always valid while the page persists in-place, protecting against partial NVRAM writes.
 Together, \texttt{persist\_wal()} and \texttt{persist\_page()} provide the tools necessary to construct recovery mechanisms.
@@ -129,7 +129,7 @@ I remove redo logs by keeping the database's durable state up-to-date.
 In ARIES terms, the database is constantly at its replayed state---there is no need to replay a redo log after failure.
 Undo logs need not maintain a global order (transactions are already free to roll back in any order), and instead I distribute ARIES undo logs per transaction.
 Such non-concurrent logs are simpler and impose less overhead than centralized logs.
-Other databases (such as Oracle) already distribute undo logs in rollback segments and undo table spaces \cite{OracleDoc}.
+Other databases (such as Oracle) already distribute undo logs in rollback segments and undo table spaces and do not require additional distributed undo mechanisms \cite{OracleDoc}.
 Transaction undo logs remain durable so that in-flight transactions at the time of failure can be rolled back.
 Each page update consists of (1) latching the page, (2) inserting an undo entry into the transaction-private undo log, using \texttt{persist\_wal()}, (3) updating the page in-place, using \texttt{persist\_page()} (without an intermediate volatile page), and (4) releasing the page latch.
 This protocol ensures all updates to a page, and updates within a transaction, persist in-order, and that no transaction reads data from a page until it is durable.
@@ -151,7 +151,7 @@ The two previous recovery mechanisms provide high throughput under certain circu
 However, it assumes IO delays to be the dominant performance bottleneck and trades off software overhead to minimize IO.
 \InPlace, on the other hand, excels when persist barriers delays are short.
 As persist barrier latency increases performance suffers, such that \NVDisk eventually performs better.
-Here, I provide a third option, coupling \NVDisk's persist barrier latency-insensitivity with \InPlace's low software overhead: \GroupCommit.
+Here, I present \GroupCommit, coupling \NVDisk's persist barrier latency-insensitivity with \InPlace's low software overhead.
 
 \subsection{Operating Principles and Implementation}
 \label{sec:OLTP_design:GroupCommit:Proposed}
@@ -195,7 +195,7 @@ However, increasing batch length defers commit for all transactions in the batch
 \label{sec::OLTP_design:GroupCommit:Proposed}
 
 \GroupCommit only improves throughput so long as the time between batches to quiesce transactions, locate dirtied data, and persist that data is substantially less than time during each batch where transactions execute.
-To provide a fair comparison between recovery mechanisms, I implement a true version of \GroupCommit in Shore-MT.
+To provide a fair comparison between recovery mechanisms, I implement a functioning prototype of \GroupCommit in Shore-MT.
 Whereas I expect NVRAM to have sufficient bandwidth to persist data quickly, orchestrating data copies, tracking dirty data with low overhead, and locating dirty data efficiently proved to be difficult software problems.
 The details of this implementation were omitted from the VLDB submission, but are included here, including work to be done.
 
@@ -208,35 +208,36 @@ The first attempt to create a set used an STL \emph{ordered\_set} (implemented a
 However, inserting cache lines to the dirty set was prohibitively expensive, slowing transactions down.
 On the other hand, \emph{ordered\_set} allows relatively fast iteration over the dirty set during batch copy.
 The next attempt used a bitmap of dirty cache lines, each bit corresponding to a cache line in the buffer pool.
-A 10GB buffer pool requires 20MB of bits to track dirty cache lines.
+A 12GB buffer pool requires 192MB of bits to track dirty cache lines.
 Before each batch starts, after the previous batch finishes persisting, dirty bits must be flash cleared in order to track the next batch.
-While bits can be quickly updated via an atomic OR operation, iterating over the dirty bits during persist was too slow, requiring a different solution.
+While bits can be quickly updated via an atomic OR operation, iterating over the dirty bits during persist was slow.
 
-Instead, I leveraged the fact that dirty regions were rare and sparsely located throughput the buffer pool.
-Batches contain up to thousands of transactions, yet these transactions could only manage to write to a small portion of a 10GB buffer pool.
-It is therefore necessary to efficiently skip over large regions of clean data when iterating through the dirty set.
+Instead, I leveraged the observation that dirty regions were rare and sparsely located throughput the buffer pool.
+Batches contain up to thousands of transactions, yet these transactions could only manage to write to a small portion of a 12GB buffer pool.
+It is therefore necessary to efficiently skip large regions of clean data when iterating through the dirty set.
 To achieve this, I created a \emph{tiered bitfield set}.
-The tiered bitfield set contains two bitfield sets.
-The first is as described above, where each bit corresponds to a cache line in the buffer pool.
-In addition, there is a higher level bit field, each bit corresponding to a \emph{cache line of the primary bit field}.
-Thus, a set bit in the top level bit field indicates that some bit within a cache line of the primary bit field is set, which in turn corresponds to dirty cache line in the buffer pool.
+The tiered bitfield set contains two bitfields.
+The first is as described above, where each bit corresponds to a cache line in the buffer pool, referred to as the \emph{primary bitfield}.
+In addition, there is a higher level bit field, each bit corresponding to a cache line of the primary bit field, called the \emph{top level bitfield}.
+Thus, a marked bit in the top level bit field indicates that at least one bit within the corresponding cache line of the primary bit field is set, which in turn correspond to dirty cache lines in the buffer pool.
 
 Updating this set requires atomic OR on the necessary bits in both bit fields of the set, a small cost.
-Iterating over the set now involves iterating over the (much smaller) top level bit field, finding \emph{segments} of the primary bit field known to contain at least one set bit.
+Iterating over the set involves iterating over the (much smaller) top level bit field, finding \emph{segments} of the primary bit field known to contain at least one set bit.
 This iteration reduces both the number of instructions and cache/memory lines accessed, minimizing persist time between batches.
 
 I propose to include additional work demonstrating the sparse nature of writes to the buffer pool, as well as timing results that show that fast dirty line tracking and persist is possible.
+Additionally, I believe this data structure will be effective for any batched persist application.
 
 \textbf{Concurrent Persist.}
 I have shown that dirty lines can be tracked and iterated over efficiently.
 However, persisting each batch with the batch coordinator alone results in long persist delays.
-These delays are due to the \emph{software} overhead of copying data, not from NVRAM limitations.
-To reduce these delays all persist operations must be parallelized across threads.
+These delays are due to the \emph{software} overhead of copying data, not NVRAM limitations.
+To reduce these delays persist operations must be parallelized across threads.
 Luckily, unused threads exist -- transaction threads that have quiesced between batches.
-Instead of sitting idle, these threads now participate in persisting each batch.
+Instead of sitting idle, these threads participate in persisting each batch.
 
 The buffer pool address space and corresponding portions of the dirty line set are partitioned into several segments, each placed in a task queue.
-The batch coordinator and transaction threads blocked by the persist process each participate by accepting tasks to persist buffer pool partitions (both log and then data in-place).
+The batch coordinator and transaction threads blocked by the persist process each participate by accepting tasks to and persisting buffer pool partitions (both log and then data in-place).
 Once all tasks complete the batch commits, allowing the next batch to begin.
 
 I propose to include results showing that persist parallelization is necessary, but is an effective way to accelerate batching.
