@@ -45,11 +45,11 @@ With sufficient IOPS and read-buffering databases can be made compute-bound and 
 NVRAMs provide this massive storage throughput, which I expect will provide high transaction performance and low recovery latency to the masses.
 
 Whereas ARIES was necessary for disk, it presents only unnecessary software overheads to NVRAM.
-I show that removing ARIES improves transaction throughput due to three effects: (1) threads previously occupied by page and log flushers become available to serve additional transactions, (2) asynchronous page flushing, which interferes with transactions as both flusher and transaction threads latch frequently accessed pages, is removed, and (3) transactions no longer insert WAL log entries, reducing the transaction code path.
+I show that removing ARIES improves transaction throughput by alleviating software bottlenecks inherent in centralized logging..
 Instead, NVRAM allows data to be updated in-place, enforcing data persistence immediately and providing correct recovery via transaction-local undo logs.
 
 NVRAMs, however, are not without their limitations.
-Se\-veral candidate NVRAM technologies exhibit larger read latency and significantly larger write latency compared to DRAM.
+Se\-veral candidate NVRAM technologies exhibit larger read latency and significantly larger write latency compared to DRAM \cite{BurrKurdi08}.
 Additionally, whereas DRAM writes benefit from caching and typically are not on applications' critical paths, NVRAM writes must become persistent in a constrained order to ensure correct recovery.
 I consider an NVRAM access model where correct ordering of persistent writes is enforced via \emph{persist barriers}, which stall until preceding NVRAM writes complete; such persist barriers introduce substantial delays when NVRAM writes are slow.
 
