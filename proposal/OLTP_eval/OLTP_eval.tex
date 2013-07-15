@@ -83,7 +83,7 @@ This analysis suggests that various page types, notably index and append-heavy p
 
 Finally, I briefly address NVRAM read bandwidth.
 For a worst-case analysis, I assume no caching.
-Given the average number of cache line accesses per page latch, the average number of page latches per transaction, and transaction throughput (taken from Section~\ref{section::Persists}), I compute worst-case NVRAM read bandwidth for each workload, shown in Table~\ref{table::ReadBandwidth}~
+Given the average number of cache line accesses per page latch, the average number of page latches per transaction, and transaction throughput (taken from Section~\ref{sec:OLTP_eval:Persists}), I compute worst-case NVRAM read bandwidth for each workload, shown in Table~\ref{table::ReadBandwidth}~
 The considered workloads require at most 1.168 GB/s (TPCC).
 Since this is substantially lower than expected NVRAM bandwidth and caching reduces the required bandwidth further, I conclude that NVRAM read bandwidth for persistent data on OLTP is not a concern.
 
@@ -103,7 +103,7 @@ Of particular insterest is the cost of ordering persists via persist barriers.
 Several factors increase persist barrier latency, including ordering persists across distributed/NUMA memory architectures, long latency interconnects (e.g., PCIe-attached storage), and slow NVRAM MLC cell persists.
 I consider the effect of persist barrier latency on transaction processing throughput to determine if and when new NVRAM technologies warrant redesigning recovery management.
 
-Refer to Sections~\ref{section::DesignSpace} and~\ref{section::Methodology} for a more thorough description of our recovery mechanisms and experimental setup.
+Refer to Sections~\ref{sec:OLTP_design:Design} and~\ref{sec:OLTP_design:Methodology} for a more thorough description of recovery mechanisms and experimental setup.
 All experiments throttle persist bandwidth to 1.5GB/s, which we believe to be conservative (possible with PCIe-attached flash).
 Ideally, NVRAM will provide fast enough accesses to use \InPlace.
 However, one would expect \InPlace's performance to suffer at large persist barrier latencies, requiring either \NVDisk or \GroupCommit to regain throughput.

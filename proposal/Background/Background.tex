@@ -28,7 +28,7 @@ This disk achieves nearly 120 MB/s sequential transfers, but random reads take a
 As a result, there is a large history of optimization for disk-resident storage, as I discuss later in the chapter.
 
 \subsection{Flash Memory}
-\label{sec:Background:Flash}
+\label{sec:Background:Storage:Flash}
 Driven by the popularity of mobile devices, Flash memory has quickly improved in both storage density and cost to the point where it has become a viable alternative for durable storage even in enterprise-class systems.
 Unlike conventional rotating hard disks, which store data using magnetic materials, Flash stores charge on a floating-gate transistor, forming a memory cell.
 These transistors are arranged in arrays resembling NAND logic gates, after which the ``NAND Flash'' technology is named.
@@ -50,7 +50,7 @@ The latency for a random read is over 100\texttimes~better on the SSD than on th
 Unlike disks, where each random read incurs mechanical delays (disk head seek and rotational delays), on SSDs, a random read is nearly as fast as a sequential read.  
 
 \subsection{NVRAM}
-\label{sec:Background:NVRAM}
+\label{sec:Background:Storage:NVRAM}
 
 Nonvolatile memories will soon be commonplace.
 Technology trends suggest that DRAM and flash memory may cease to scale, requiring new dense memory technologies \cite{LeeIpek09}.

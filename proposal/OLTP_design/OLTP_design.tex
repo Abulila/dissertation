@@ -7,9 +7,9 @@ I would especially like the thank Brian and Bill for bringing industry's point o
 
 This chapter outlines the problems with existing disk recovery management, the potential pitfalls of using NVRAM for persistent applications, a methodology for evaluating NVRAM devices that do not yet exist, and a description of several candidate software designs for NVRAM recovery management, to be evaluated later.
 I consider this chapter largely complete with two exceptions.
-First, I have performed a validation of my timing model that has not yet been published that I intend to include in the final thesis \cite{sec:OLTP_design:Methodology:Proposed}.
+First, I have performed a validation of my timing model that has not yet been published that I intend to include in the final thesis \ref{sec:OLTP_design:Methodology:Proposed}.
 Second, my implementation of \GroupCommit is more complex (and interesting, in my opinion) than a 12 page journal paper allows room to describe.
-I intend to include a detailed description in Section~\cite{sec::OLTP_design:GroupCommit:Proposed}.
+I intend to include a detailed description in Section~\ref{sec::OLTP_design:GroupCommit:Proposed}.
 
 \section{Introduction}
 \label{sec:OLTP_design:Intro}
@@ -272,8 +272,8 @@ I am not aware of any previous work that extends disk group commit to reduce the
 A limited-capacity staging buffer (i.e., one insufficient for the entire data set) may limit batch size, as described above.
 
 Each of the three recovery mechanisms may replicate all data between NVRAM and DRAM to ensure fast read accesses, manage a smaller DRAM buffer cache, or omit the cache altogether.
-In Section~\ref{section::Reads} I consider the importance of NVRAM caching to transaction throughput.
-Then, in Section~\ref{section::Persists} I assume a DRAM-replicated data store to isolate read performance from persist performance in evaluating each recovery mechanisms's ability to maximize transaction throughput.
+In Section~\ref{sec:OLTP_eval:Reads} I consider the importance of NVRAM caching to transaction throughput.
+Then, in Section~\ref{sec:OLTP_eval:Persists} I assume a DRAM-replicated data store to isolate read performance from persist performance in evaluating each recovery mechanisms's ability to maximize transaction throughput.
 The next section describes an evaluation methodology for OLTP on NVRAM.
 
 \section{Methodology}
