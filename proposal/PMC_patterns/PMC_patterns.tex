@@ -91,7 +91,7 @@ It remains unclear if this property should be leveraged by hardware or in the co
 \input{PMC_patterns/Fig.linkedlist.tex}
 
 Finally, I consider a persistent linked list, shown in Figure~\ref{fig:LinkedList}.
-The linked list contains a persistent Head reference, persistent nodes (each containing a \emph{next} reference), and a volatile Tail reference to quickly find the end of the list for insertion (although we assume that at recovery the list will only be traversed from the Head).
+The linked list contains a persistent Head reference, persistent nodes (each containing a \emph{next} reference), and a volatile Tail reference to quickly find the end of the list for insertion (although I assume that at recovery the list will only be traversed from the Head).
 Unlike the persistent buffer, where log entries persist in parallel and the counter is overwritten, the linked list does not overwrite any values as new nodes are added.
 For correctness, node data must persist before the node \emph{next} reference pointing to that data.
 However, strict persistent consistency models will enforce that all nodes persist in the order that they are inserted into the list (dependencies shown as dotted lines in the bottom of the Figure).

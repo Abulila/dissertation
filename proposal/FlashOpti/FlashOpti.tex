@@ -53,11 +53,11 @@ In other words, I am trying to discover, empirically, cases where an access path
 
 I carry out this empirical investigation using IBM DB2 Enterprise Server Edition version 9.7.
 Experiments use the Wisconsin Benchmark schema \cite{Bitton83benchmarkingdatabase} to provide a simple, well-documented dataset on which to perform scans and joins.
-Though this benchmark does not represent a particular real-world application, modeling a full application is not our intent.
+Though this benchmark does not represent a particular real-world application, modeling a full application is not my intent.
 Rather, the Wisconsin Benchmark's uniformly distributed fields allows us to control precisely the selectivity of each query.
-Whereas real world queries are more complicated than the simple scans and joins we study, these simple microbenchmarks reveal the underlying differences between the storage devices and scan/join algorithms most clearly.
+Whereas real world queries are more complicated than the simple scans and joins studied here, these simple microbenchmarks reveal the underlying differences between the storage devices and scan/join algorithms most clearly.
 Alternative ``real world" benchmarks (namely TPC-H \cite{TPCH}) complicate matters, making it difficult to discern why different query plans prefer disk or SSD.
-I aggregate results of all queries to avoid materializing output tables as I am primarily interested in isolating other database operations; typically all results must be aggregated regardless of device, so we remove this step to provide a better comparison.
+I aggregate results of all queries to avoid materializing output tables as I am primarily interested in isolating other database operations; typically all results must be materialized regardless of device, so I remove this step to provide a better comparison.
 I run queries on a Pentium Core Duo with 2GB main memory, a 7200 RPM root disk drive, and the conventional and SSD database disks described in Table \ref{table:DiskCharacteristics}.
 Both the hard disk and SSD were new at the beginning of the experiments.
 While other work has shown that SSD performance may degrade over the lifetime of the device I did not observe any change in performance.
@@ -111,12 +111,12 @@ As a point of reference, given a 4kb page size and neglecting page headers, the 
 The implication of this result is that, for typical tuple sizes, the vast majority of a relation must be read even if the selectivity is but a few percent.
 Hence, with the exception of single-tuple lookups, there are few real-world scenarios where scan performance improves with better random access latency under conventional storage managers that access data in large blocks.
 To benefit from low access latency, future devices will need to provide random access at tuple (rather than page) granularity.
-Until we have such devices, relation and rowid-sort scans will dominate, with IO bandwidth primarily determining scan performance.
+Until such devices are available, relation and rowid-sort scans will dominate, with IO bandwidth primarily determining scan performance.
 
 \section{Join Analysis}
 \label{sec:FlashOpti:Joins}
 
-We next study the variability in join performance across disk and Flash SSD.  
+I next study the variability in join performance across disk and Flash SSD.  
 Again, the objective is to identify cases where the optimal join algorithm for disk consistently results in grossly sub-optimal performance on Flash SSD.
 Such scenarios imply that it is important for the optimizer to be SSD aware.
 
@@ -142,22 +142,22 @@ In all experiments, I perform an equijoin on an integer field, and use an aggreg
 I report results in graphical form in Figure~\ref{figure::joins} and absolute runtimes in Table~\ref{table::joins}.
 In Figure~\ref{figure::joins}, each group of bars shows the relative performance of sort-merge and hybrid hash joins on disk (darker bars) and Flash SSD (lighter bars), normalized to sort-merge performance on disk.
 Lower bars indicate higher performance.
-We provide the same data in tabular form to illustrate the runtime scaling trends with respect to relation size, which are obscured by the normalization in the graph.
+I provide the same data in tabular form to illustrate the runtime scaling trends with respect to relation size, which are obscured by the normalization in the graph.
 
 Two critical results are immediately apparent from the graph.  
 First, Flash SSDs typically outperform disk by 5\texttimes~to 6\texttimes~regardless of join algorithm, a margin that is substantially higher than the gap in sequential IO bandwidth, but far smaller than the gap in random IO bandwidth (see Table~\ref{table:DiskCharacteristics}).
 Hence, though both join algorithms benefit from the improved random IO performance of SSDs, the benefit is muted compared to the 100\texttimes~device-level potential.
-Second, we note that, whereas there is significant performance variability between the join algorithms on disk (typically over 20\%), with the exception of a single outlier, the variability is far smaller on Flash SSD (often less than 1\%).
+Second, whereas there is significant performance variability between the join algorithms on disk (typically over 20\%), with the exception of a single outlier, the variability is far smaller on Flash SSD (often less than 1\%).
 From these results I conclude that although important on disk, the choice of sort-merge vs hybrid hash join on SSD leads to inconsequential performance differences relative to the drastic speedup of shifting data from disk to Flash.
 Hence, there is no compelling reason to make the query optimizer SSD-aware; the choice it makes assuming the performance characteristics of a disk will yield near-optimal performance on SSD.
 
 \input{FlashOpti/tab.joins.tex}
 
-I highlight two notable outliers in our results.
+I highlight two notable outliers in the results.
 On disk, the best join algorithm is strongly correlated to query projectivity with the exception of the 1.9GB~\texttimes~1.9GB join at 25\% projectivity.
 Because the required hash table size for this join is close to the main memory capacity, I believe that this performance aberration arises due to DB2 selecting poor partition sizes for the join.
-Second, on Flash, I observe a large performance difference (over 2\texttimes) between sort-merge and hybrid hash join for our largest test case, a 9.7GB~\texttimes~9.7GB join at 25\% projectivity.
-For this query, we observe a long cpu-bound period with negligible IO at the end of the hybrid hash join that does not occur for any of the other hash joins.
+Second, on Flash, I observe a large performance difference (over 2\texttimes) between sort-merge and hybrid hash join for the largest test case, a 9.7GB~\texttimes~9.7GB join at 25\% projectivity.
+For this query, I observe a long cpu-bound period with negligible IO at the end of the hybrid hash join that does not occur for any of the other hash joins.
 Hence, I believe that this performance aberration is unrelated to the type of storage device, and may have arisen due to the methods employed to coax the optimizer to choose this join algorithm.
 In any event, neither of these outliers outweigh the broader conclusion that there is no particular need for the query optimizer to be SSD aware.
 
@@ -185,7 +185,7 @@ The study bases this conclusion on the observation that asynchronous random read
 Indeed, the arguments made by Baumann are a key component of the intuition laid out in Section~\ref{sec:FlashOpti:Intro} that led me to expect a need for SSD-aware query optimization.
 However, the conclusion neglects the observations discussed in Section~\ref{sec:FlashOpti:Scans} demonstrating that queries selecting more than a handful of tuples will likely retrieve the majority of pages in a relation, and thus gain no advantage from fast random IO.
 Tsirogiannis introduces a join algorithm that retrieves only the join columns, joins these values, and then retrieves projected rows via a temporary index.
-By our previous argument, scanning for projected data should retrieve the majority of data pages, preferring a relation scan, and thus provide comparable advantage on disk and SSD.
+By the previous argument, scanning for projected data should retrieve the majority of data pages, preferring a relation scan, and thus provide comparable advantage on disk and SSD.
 I leave a comparative evaluation of their FlashJoin algorithm on SSD and disk to future work.
 
 \section{Conclusion}

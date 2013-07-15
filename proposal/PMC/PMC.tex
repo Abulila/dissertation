@@ -187,8 +187,8 @@ The next model relaxes the multi-threaded constraint.
 
 This model considers that thread communication and data persistence should not always occur at the same granularity.
 Imagine, as an example, the \GroupCommit design from Section~\ref{sec:OLTP_design:GroupCommit}.
-In this design we required a volatile staging buffer, separate from the primary NVRAM store, where batch updates occur.
-Only at the end of the batch would we copy the original batch data to an undo log and persist batch updates in-place to NVRAM.
+In this design I required a volatile staging buffer, separate from the primary NVRAM store, where batch updates occur.
+Only at the end of the batch would I copy the original batch data to an undo log and persist batch updates in-place to NVRAM.
 An alternative design omits this staging buffer by allowing updates during a batch to persist directly to the NVRAM address space.
 However, each update must first check if the address region being modified is protected by a segment of the undo log, and if it is not create and persist the necessary undo first.
 Once a regions of memory are protected by undo, threads may update the NVRAM store in-place for the remainder of the batch without considering the order that data persists, even when data sharing occurs..
@@ -214,7 +214,7 @@ A thread may enforce that all local persists occur before persists from other th
 Such \emph{persist order-before} barriers are useful for communicating persistence to another thread.
 A thread may enforce that all remote persists occur before subsequent local persists in a \emph{persist order-after}, useful for reading persists from remote threads.
 Both of these may be combined in a \emph{persist total-order}, allowing a thread to completely order all persistent actions with other threads.
-While these define persistent state, we still rely on an underlying consistency model to determine what values are communicated and which threads interact.
+While these define persistent state, execution still relies on an underlying consistency model to determine what values are communicated and which threads interact.
 
 The batching example might enforce batch persistence by having all transaction threads access some pre-determined memory address and emitting a \emph{persist order-before} at the end of the batch.
 Once the batch manager is certain all threads have accessed this memory it accesses the pre-determined memory address itself and inserts a \emph{persist order-after}, ordering the persists from all other threads before any subsequent persists from the batch manager.

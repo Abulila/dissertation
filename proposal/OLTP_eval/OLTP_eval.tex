@@ -27,7 +27,7 @@ Note also that indices access a greater number of cache lines per page access th
 
 \textbf{Throughput.}
 \input{OLTP_eval/Fig.ReadPerformance.tex}
-I create a timing model in Shore-MT from our memory traces.
+I create a timing model in Shore-MT from the previous memory traces.
 Given traces, I perform cache analysis at page granularity, treating latches as page accesses and assuming a fully associative cache with a least-recently-used replacement policy (LRU).
 Cache analysis produces an average page miss rate to each table.
 I conservatively assume that every cache line access within an uncached page introduces an NVRAM stall, neglecting optimizations such as out-of-order execution and simultaneous multi-threading that might hide some NVRAM access stalls. 
@@ -49,7 +49,7 @@ While too large for on-chip caches, such a buffer might be possible as a hardwar
 \subsection{Analysis}
 \label{sec:OLTP_eval:Reads:Analysis}
 \input{OLTP_eval/Fig.Caching.tex}
-I have shown that modest cache sizes effectively hide NVRAM read stalls for our workloads, and further analyze caching behavior to reason about OLTP performance more generally.
+I have shown that modest cache sizes effectively hide NVRAM read stalls for these workloads, and further analyze caching behavior to reason about OLTP performance more generally.
 Figure~\ref{fig::Caching} shows the page miss rate per page type (index, store, or other) as page cache capacity increases.
 Each graph begins at 1.0 at the left -- all page accesses miss for a single page cache.
 As cache capacity increases, workloads see their miss rates start to decrease between cache capacity of five and 20 pages.
@@ -104,7 +104,7 @@ Several factors increase persist barrier latency, including ordering persists ac
 I consider the effect of persist barrier latency on transaction processing throughput to determine if and when new NVRAM technologies warrant redesigning recovery management.
 
 Refer to Sections~\ref{sec:OLTP_design:Design} and~\ref{sec:OLTP_design:Methodology} for a more thorough description of recovery mechanisms and experimental setup.
-All experiments throttle persist bandwidth to 1.5GB/s, which we believe to be conservative (possible with PCIe-attached flash).
+All experiments throttle persist bandwidth to 1.5GB/s, which I believe to be conservative (possible with PCIe-attached flash).
 Ideally, NVRAM will provide fast enough accesses to use \InPlace.
 However, one would expect \InPlace's performance to suffer at large persist barrier latencies, requiring either \NVDisk or \GroupCommit to regain throughput.
 
@@ -156,7 +156,7 @@ I use this knob to measure the relationship between throughput and high-percenti
 
 Figure~\ref{fig::XctLatency} shows throughput, normalized to \InPlace at 0\textmu s persist barrier latency.
 The results consider a 3\textmu s persist barrier latency, where \GroupCommit provides a throughput improvement over other recovery mechanisms.
-The different \GroupCommit points represent different batch periods, and we report the measured 95th percentile transaction latency for all recovery mechanisms.
+The different \GroupCommit points represent different batch periods, and I report the measured 95th percentile transaction latency for all recovery mechanisms.
 I measure transaction latency from the time a transaction begins to the time its batch ends (Shore-MT does not model any pre-transaction queuing time).
 
 The results illustrate that \GroupCommit is capable of providing equivalent throughput to the other recovery mechanisms with reasonable latency increases (no more than 5\texttimes).

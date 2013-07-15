@@ -111,7 +111,7 @@ However, as selectivity increases, the fixed-cost relation scan becomes faster.
 Though the relation scan reads the entire table, it can do so using sequential rather than random IO, leveraging the better sequential IO performance of rotating hard disks.
 A classic rule of thumb for access path selection is to choose a relation scan once selectivity exceeds ten percent \cite{RamakrishnanAndGehrke}.
 
-Recent databases implement a third, hybrid scan operator, which we call \emph{rowid-sort scan}.
+Recent databases implement a third, hybrid scan operator, which I call \emph{rowid-sort scan}.
 In this scan operator, the unclustered index is scanned to identify relevant tuples.
 However, rather than immediately fetching the underlying data pages, the rowid of each tuple is stored in a temporary table, which is then sorted at the end of the index scan.
 Then, the pages identified in the temporary table are fetched in order, and relevant tuples are returned from the page.

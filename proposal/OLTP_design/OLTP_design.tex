@@ -59,7 +59,7 @@ Subsequent chapters will build on the designs and methodology presented here to 
 
 Near-future NVRAM devices will undoubtedly be faster than both disk and flash.
 However, compared to DRAM many NVRAM technologies impose slower reads and significantly slower persistent writes.
-We must consider both in redesigning OLTP for NVRAM.
+both must be considered in redesigning OLTP for NVRAM.
 
 \subsection{NVRAM Reads}
 \label{sect:OLTP_design:Design:Reads}
@@ -96,7 +96,7 @@ Figure~\ref{fig::Code} shows two operations to atomically update NVRAM data.
 The first, \texttt{persist\_wal()}, persists log entries into an ARIES log.
 Sho\-re-MT log entries are post-pended with their Log Serial Number (LSN -- log entry file offset).
 At recovery, a log entry is considered valid only if this tail LSN matches the location of the entry.
-I persist log entries atomically by first persisting an entry without its tail LSN, and only later (once we are certain the entry is persistent) persist the LSN.
+I persist log entries atomically by first persisting an entry without its tail LSN, and only later (once certain the entry is persistent) persist the LSN.
 This order is enforced by inserting a persist barrier between writing the log entry and its LSN.
 Additionally, I reduce the number of persist barriers by persisting entries in batches, writing several log entries at once (without LSNs), followed by all their LSNs, separated by a single persist barrier.
 It is entirely possible (yet unlikely) that pre-existing LSN tails already match the log entry's offset; tails must be checked and first reset when this occurs.
@@ -123,8 +123,8 @@ While requiring the least engineering effort, \NVDisk contains large software ov
 Next, I leverage NVRAM's low latency to reduce these overheads.
 
 \textbf{In-Place Updates.}
-Fast, byte-addressable NVRAM allows updates to persist in-place and enforce persist order immediately, a design we call \InPlace.
-\InPlace allows us to remove the centralized log by replacing redo and undo log functionality elsewhere.
+Fast, byte-addressable NVRAM allows updates to persist in-place and enforce persist order immediately, a design called \InPlace.
+\InPlace removes the centralized log by replacing redo and undo log functionality elsewhere.
 I remove redo logs by keeping the database's durable state up-to-date.
 In ARIES terms, the database is constantly at its replayed state---there is no need to replay a redo log after failure.
 Undo logs need not maintain a global order (transactions are already free to roll back in any order), and instead I distribute ARIES undo logs per transaction.
@@ -232,7 +232,7 @@ I have shown that dirty lines can be tracked and iterated over efficiently.
 However, persisting each batch with the batch coordinator alone results in long persist delays.
 These delays are due to the \emph{software} overhead of copying data, not from NVRAM limitations.
 To reduce these delays all persist operations must be parallelized across threads.
-Luckily, we have threads to spare -- transaction threads that have quiesced between batches.
+Luckily, unused threads exist -- transaction threads that have quiesced between batches.
 Instead of sitting idle, these threads now participate in persisting each batch.
 
 The buffer pool address space and corresponding portions of the dirty line set are partitioned into several segments, each placed in a task queue.
@@ -251,7 +251,7 @@ This discussion ignores possible uses of hard disk to provide additional capacit
 Each design works alongside magnetic disk with additional buffer management and the constraint that pages persist to disk before eviction from NVRAM.
 
 Table~\ref{table::DesignSpace} lists the possible combinations of caching architectures and recovery mechanisms.
-The left column presents \NVDisk, which we see as the obvious and most incremental use for NVRAM.
+The left column presents \NVDisk, the obvious and most incremental use for NVRAM.
 Of note is the center-left cell, \NVDisk without the use of a volatile buffer.
 WAL, by its design, allows pages to write back asynchronously from volatile storage.
 Removing the volatile cache requires transactions to persist data in-place, but do so only after associated log entries persist, retaining the software overheads of \NVDisk as well as the frequent synchronization in \InPlace.
@@ -303,7 +303,7 @@ Table~\ref{table::Specs} shows the experimental system configuration.
 \end{table}
 
 \textbf{Modeling NVRAM delays.}
-Since NVRAM devices are not yet available, we must provide a timing model that mimics their expected performance characteristics.
+Since NVRAM devices are not yet available, I must provide a timing model that mimics their expected performance characteristics.
 I model NVRAM read and write delays by instrumenting Shore-MT with precisely controlled assembly-code delay loops to model additional NVRAM latency and bandwidth constraints at 20ns precision.
 Hence, Shore-MT runs in real time as if its buffer cache resided in NVRAM with the desired read and write characteristics.
 
@@ -315,7 +315,7 @@ Together, these offline statistics provide an average number of cache line acces
 I then introduce a delay at each latch based on the measured average number of misses and an assumed per-read latency increase based on the NVRAM technology.
 
 I model NVRAM persist delays by annotating Shore-MT to track buffer cache writes at cache line granularity---64 bytes---using efficient ``dirty" bitmaps.
-Depending on the recovery mechanism, we introduce delays corresponding to persist barriers and to model NVRAM write bandwidth contention.
+Depending on the recovery mechanism, I introduce delays corresponding to persist barriers and to model NVRAM write bandwidth contention.
 Tracking buffer cache writes introduces less than a 3\% overhead to the highest throughput experiments.
 
 I create NVRAM delays using the x86 RDTSCP instruction, which returns a CPU-frequency-invariant, monotonically increasing time-stamp that increments each clock tick.
@@ -405,7 +405,7 @@ Chen \emph{et al.} reconsider database algorithms and data structures to address
 However, their work does not consider durable consistency for transaction processing.
 Venkataraman \emph{et al.} demonstrate a multi-versioned log-free B-Tree for use with NVRAM \cite{VenkataramanTolia11}.
 Indices are updated in place, similarly to my \InPlace, without requiring any logging (physical or otherwise) and while providing snap shot reads.
-Our work considers durability management at a higher level, user transactions, and consistency throughout the entire database.
+This work considers durability management at a higher level, user transactions, and consistency throughout the entire database.
 Finally, Fang \emph{et al.} develop a new WAL infrastructure for NVRAM that leverages byte addressable and persistent access \cite{FangHsiao11}.
 Fang aims to improve transaction throughput but retains centralized logging.
 I distinguish myself by investigating how NVRAM write performance guides database and recovery design more generally.
