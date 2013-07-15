@@ -12,7 +12,6 @@ For each, I provide the operating principles and interesting technological trend
 
 \subsection{Disk}
 \label{sec:Background:Storage:Disk}
-\todo{find some citation for disk.  System R?  Also citation for operating principles}
 I provide a summary of disk here only for comparison and to be thorough.
 Disk has been the primary durable and high capacity storage technology for decades.
 Disks function by storing data on spinning magnetic platters.
@@ -21,11 +20,11 @@ Once the head settles, it may read or write data once the platter rotates and th
 Disk capacity increases with the areal size and number of platters, as well as areal density (placing more sectors and tracks within the same area).
 Because capacity has scaled so well (and continues to), disk remains an important technology for large datasets and persistent storage.
 
-While dominant, disk exhibits relatively slow access and undesirable access behavior.
+While dominant, disk exhibits relatively slow access and undesirable access behavior \cite{RuemmlerWilkes94}.
 Rotational speed limits the rate that data transfers to or from the disk.
 Further, random reads and writes must first seek to the proper track and then wait until the sector of interest reaches the head, a process which takes several ms.
 Table~\ref{table:DiskCharacteristics} lists the measured performance characteristics of an enterprise disk.
-My disk achieves nearly 120 MB/s sequential transfers, but random reads take an average of 10ms (only 50 KB/s for 512 byte sectors!).
+This disk achieves nearly 120 MB/s sequential transfers, but random reads take an average of 10ms (only 50 KB/s for 512 byte sectors!).
 As a result, there is a large history of optimization for disk-resident storage, as I discuss later in the chapter.
 
 \subsection{Flash Memory}
@@ -44,7 +43,7 @@ Recent Flash devices further increase storage density by using several distinct 
 A Flash-based SSD wraps an array of underlying Flash memory chips with a controller that manages capacity allocation, mapping, and wear leveling across the individual Flash devices.  
 The controller mimics the interface of a conventional (e.g., SATA) hard drive, allowing Flash SSDs to be drop-in replacements for conventional disks.
       
-As previously noted, Flash SSDs provide substantially better performance than disks, particularly for random reads, but at higher cost.
+As previously noted, Flash SSDs provide substantially better performance than disks, particularly for random reads, but at higher cost \cite{BoboilaDesoyers11}.
 Table \ref{table:DiskCharacteristics} lists specifications of a typical Flash SSD as compared to a 10,000 RPM hard drive.
 Though neither of these devices are the highest-performing available today, they are representative of the mid-range of their respective markets.
 The latency for a random read is over 100\texttimes~better on the SSD than on the disk, while the sequential read bandwidth is 1.6\texttimes~better. 

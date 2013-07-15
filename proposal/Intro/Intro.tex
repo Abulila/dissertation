@@ -18,7 +18,7 @@ I match each workload to the emerging storage technology that suits it best and 
 
 Analytics relies on disk to provide enormous data capacity.
 Typical analytics work-flow involves taking a snapshot of data from an online database and mining this data for complex, yet useful, patterns.
-While applications do not rely on disk's durability for recovery (in fact, instances that reasonably fit in main memory have no need for disk), modern analytics data sets may reach \fixme{how large and cite} scale, and accessing such large data quickly becomes the dominant bottleneck.
+While applications do not rely on disk's durability for recovery (in fact, instances that reasonably fit in main memory have no need for disk), modern analytics data sets reach peta-byte scale \cite{Economist10}, and accessing such large data quickly becomes the dominant bottleneck.
 Such capacity is only reasonably achieved by dense disk and flash memory.
 
 Decades of research have provided modern analytics databases with tools to minimize storage page accesses, particularly random accesses (e.g., disk-specific indices, join algorithms to minimize page access and produce large sequential runs).
