@@ -102,19 +102,21 @@ lock_release()
 Partial epoch order allows single-thread persists to occur in parallel by placing them in epochs.
 Epochs across threads are ordered (or considered concurrent) according to the consistency model and memory sharing.
 PEO allows buffer data to persist in parallel, and removes ordering constraints between buffer persists and the previous counter persist from another thread (epochs are concurrent -- see Figure~\ref{fig:buffer_PEO_pseudocode}).
-However, buffer persists are ordered after buffer persists of the previous insert (solid arrows in the Figure), and ordered after counter persists from the same thread (dashed arrows in the Figure).
+However, buffer persists are ordered after buffer persists of the previous insert (top solid arrow in the Figure), and ordered after counter persists from the same thread (dashed arrows in the Figure).
+Even a glance at the Figure reveals how complicated cross-thread dependencies and concurrent persist epochs become.
+While PEO provides a correct model by removing deadlocks from BPFS, and enables optimizations by allowing concurrent persist epochs, this is not a reasonable programming interface.
 
-Assuming subsequent inserts occur from different threads the persist critical path forms a chain of only one persist epoch per insert (either through the counters or through the buffer persists).
+Assuming subsequent inserts occur from different threads, the persist critical path forms a chain of only one persist epoch per insert (either through the counters or through the buffer persists).
 Using our earlier assumptions, this model allows inserts every 100ns on average.
 Such delays are similar to invalidation delays in modern multi-socket CPU systems, but NVRAM may require more than 100ns per serialized persist.
 Furthermore, PEO requires frequent persist barriers, placing a burden on the programmer.
-While these epoch barriers are deemed intuitive, they are not as easy to use as sequential consistency (no barriers required) and are more complicated to reason about with multi-threading (as evident by BPFS allowing deadlocks).
+While these epoch barriers are deemed intuitive, they are not as easy to use as sequential consistency (no barriers required).
 
 Reasoning about concurrent epochs is quite difficult.
-I provide a second implementation of buffer insert under PEO (Figure~\ref{fig:buffer_PEO_pseudocode}, bottom) that allows a total order of persist epochs (as intended by BPFS).
+I provide a second implementation of buffer insert under PEO (Figure~\ref{fig:buffer_PEO_pseudocode}, bottom) that allows a total order of persist epochs (TEO -- as intended by BPFS).
 Epochs in this implementation have either volatile races (lock/release) or persists, not both.
-Additionally, a barrier is still required to guarantee that buffer data persists before updating the counter.
-This implementation, while more obviously correct, increases persist critical path by introducing a dependence between counter persist and the next buffer data persist (the dashed arrow of Figure~\ref{fig:buffer_PEO_LPO} occurs even for cross-thread dependencies).
+Following this rule allows a consistent total order of persist epochs (those epochs that actually persist).
+This implementation, while more obviously correct, increases persist critical path by introducing a dependence between counter persist and the next buffer data persist (the dashed arrow of Figure~\ref{fig:buffer_PEO_LPO} implies a dependence even for inserts from different threads).
 
 
 \input{PMC_patterns/Fig.buffer_relaxed_elision.tex}
@@ -122,25 +124,26 @@ This implementation, while more obviously correct, increases persist critical pa
 Finally, I imagine a relaxed consistency model for this buffer, shown in Figure~\ref{fig:buffer_relaxed_elision} (top).
 I will not describe the semantics of this model, but rather the desired persist dependencies.
 Like PEO buffer data persists in parallel.
-Like LPO there are no dependencies between counter persists subsequent buffer persists.
-In fact, this is true even for single-threaded use.
+Like LPO there are no dependencies between counter persists and subsequent buffer persists.
+This is true even for single-threaded use.
 Doing so requires more complicated barriers that do not impose serial dependencies between epochs, but instead allow precise, possibly named dependencies.
-For example, a barrier may enforce that a given epoch depends only on the previous epoch from the same thread, and no other epochs regardless of thread communication or data dependencies.
+For example, a barrier may declare that an epoch has no earlier persist dependencies, but still enforce that all later epochs persist after it.
 Such a barrier would allow a programmer to persist buffer data and guarantee that buffer persists never serialize after counter persists.
 
 I introduce an additional optimization to the relaxed consistency model, leveraging the insight from \cite{FangHsiao11} that not all values must persist, shown at the bottom of Figure~\ref{fig:buffer_relaxed_elision}.
 Persistent memory consistency models describe the set of \emph{allowable} persistent states, yet not every allowable state must actually persist.
-Since the counter is atomically persistable (8 bytes), the memory system may defer persisting new values of the counter.
-Once the buffer data for two (or more) adjacent log entries successfully persist, the counter value for the last entry persists, implicitly persisting all intermediate counter values at once and validating the log entries, eliding persist epochs entirely.
-By recognizing that the counter variable is atomically persistable and exists in an epoch by itself, we might imagine a new epoch barrier that restricts the epoch to a single persist of atomic persist size.
-This persist will defer, hoping to coalesce with similar persist epochs.
-A new value will eventually persist, but may skip any intermediate values so long as all the coalesced persist epochs' dependencies are satisfied.
+Since the counter is atomically persistable (8 bytes), the memory system may defer persisting new values.
+Once the buffer data for two (or more) adjacent log entries successfully persist, the counter value for the last entry persists (shaded circle in the Figure), implicitly persisting all intermediate counter values at once, eliding persist epochs entirely.
+The key is that the counter variable is atomically persistable and is the only persist within its epoch.
+We might imagine a new epoch barrier that allows only a single persist of atomic persist size.
+This persist defers, hoping to coalesce with similar persist epochs.
+A new value eventually persists, but may skip intermediate values so long as all the coalesced persist epochs' dependencies are satisfied.
 The result is that the persist critical path is now bounded to a constant -- persists should never limit the throughput of this buffer (assuming large but finite buffers).
 
 More generally, persist dependencies form a schedule or DAG, with persist epochs forming nodes in the graph and epoch dependencies forming edges.
-Nodes in the DAG may be combined into an elision super node (combining all the nodes' persists) so long as 1) all persists in the super node fit in an atomically persistable size, 2) combining nodes retains the DAG (no cycles introduced), and 3) the super node inherits all dependencies of its member nodes, and all nodes that previously depended on the super node's member nodes now depend on the super node.
+Nodes in the DAG may be combined into an \emph{elision super node} (combining all the nodes' persists) so long as 1) all persists in the super node fit in an atomically persistable size, 2) combining nodes retains the DAG (no cycles introduced), and 3) nodes inherit dependences -- the super node inherits all dependencies of its member nodes, all nodes depending on member nodes now depend on the super node.
 An interesting prospect is that as NVRAM technologies progress, the atomically persistable size may increase (say, from 8 bytes to 64 bytes).
-Larger atomic persists allow additional persist epochs to coalesce into super nodes, decreasing persist critical path, possibly without intervention from the user.
+Larger atomic persists allow additional persist epochs to coalesce into super nodes, decreasing persist critical path, possibly without user intervention.
 It remains unclear if this property should be leveraged by hardware or in the consistency model, if at all.
 
 \section{Persistent Linked List}
@@ -155,8 +158,10 @@ For correctness, node data must persist before the node \emph{next} reference po
 However, strict persistent consistency models will enforce that all nodes persist in the order that they are inserted into the list (dependencies shown as dotted lines in the bottom of the Figure).
 Ignoring sync operations briefly, it would be correct to allow nodes to persist in parallel (references persisting after associated data), and simply determine the persistent and valid portion of the list at recovery.
 Doing so bounds the persist critical path to a constant.
-However, there is now no efficient way to sync the list short of traversing the entire list again, ordering the sync after all persists within the traversal.
-This is an interesting design for persistent lists that require high throughput, rarely sync, and prefer linked lists (perhaps to insert in the middle).
+
+However, there is now no efficient way to sync the list.
+The programmer may determine that the entire list is persistent (or block until it persists) by traversing the list, adding substantial complexity and overhead.
+This is an interesting design for persistent lists that require high throughput, rarely sync, and prefer linked lists (to insert or remove in the middle).
 Faster, more efficient, yet intuitive sync design remains an interesting challenge.
 
 \section{Conclusion and Future Work}
