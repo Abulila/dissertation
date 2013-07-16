@@ -13,10 +13,9 @@ I take a different approach, looking at useful data structures and potential per
 \label{sec:PMC_patterns:Buffer}
 
 \input{PMC_patterns/Fig.buffer.tex}
-\input{PMC_patterns/Fig.buffer_PEO_LPO.tex}
-\input{PMC_patterns/Fig.buffer_relaxed_elision.tex}
 
 I first discuss a persistent buffer, used as an OLTP database centralized log in \cite{FangHsiao11}.
+The version presented here is a simplification of the implementation originally proposed, but illustrates the necessary performance concerns.
 This log buffer contains a persistent data array as well as a persistent counter, marking the end of the valid, persistent region of the buffer, shown at the top of Figure~\ref{fig:buffer}.
 In the example buffer slots 0 and 1 are persistent and valid, while slots 2 and 3 are not (0 and 1 will be recovered on failure).
 For simplicity, I neglect details that require data to wrap around the end of the buffer and instead pretend that the valid region of the buffer always grows from the base offset of the buffer through the address marked by the counter.
@@ -25,10 +24,10 @@ For correctness, buffer data must persist before the new counter value persists,
 These dependencies guarantee that, on recovery, the valid portion of the buffer includes the base address through the address located in the persistent counter.
 
 \cite{FangHsiao11} assumes the BPFS consistency model, noting that updates to the counter field will cause each thread to stall while the previous value persists.
-Instead of considering other hardware and programming interfaces, they provide additional software complexity to allow only intermediate values of the counter to persist.
-I believe this optimization contains a recovery bug (further motivating the need for intuitive, high performance persistent consistency models), but I leverage the idea of only persisting intermediate values later in this chapter.
-\cite{FangHsiao11} provides several complicated optimizations to 1) allow log entries from different threads to persist in parallel (by explicitly removing or re-ordering cross-thread dependencies) and (2) only persist intermediate values of the counter, removing a chain of persist dependencies that would otherwise limit throughput.
-Such a design improves performance but requires additional effort and is unintuitive.
+Their work provides several complicated optimizations to 1) allow log entries from different threads to persist in parallel (by explicitly removing or re-ordering cross-thread dependencies) and (2) only persist intermediate values of the counter, removing a chain of persist dependencies that would otherwise limit throughput.
+Such design improves performance but requires additional effort and is unintuitive.
+Other persistent consistency models might enable these optimizations without the use of error-prone software implementations.
+I qualitatively evaluation my three consistency models with this buffer, reasoning about persist critical path length per buffer insert.
 
 \textbf{PSC.} Under PSC (recall, persistent sequential consistency) all persists to the buffer and counter form a dependence chain, shown at the bottom of Figure~\ref{fig:buffer}.
 Every atomically persistable segment (8 bytes) of buffer data persists in serial, followed by the new value of the counter.
@@ -38,6 +37,8 @@ If NVRAM persists take even 100ns (a conservative estimate), entries can only be
 This rate is significantly slower than the throughput of modern concurrent buffers, where cache invalidations take anywhere from 10s to 100s ns (multi-core to multi-socket, respectively).
 Without relaxed persistent memory consistency models, NVRAM persists will necessarily create a throughput bottleneck.
 
+
+\input{PMC_patterns/Fig.buffer_PEO_LPO.tex}
 \textbf{LPO.} Next I consider the relaxed persistent consistency models introduced in Section~\ref{sec:PMC:PersistenceModels}, starting with LPO.
 Recall that LPO (local persist order) enforces program-order persist order within threads, but not cross-thread dependence order (barriers necessary).
 Figure~\ref{fig:buffer_PEO_LPO} shows execution of LPO at the top.
@@ -48,16 +49,75 @@ If every log entry is inserted by a separate thread, LPO results in a persist cr
 However, log entries within a single thread must persist in-order, limiting the throughput of each individual thread.
 LPO is easy to program, as all persists within a thread occur-in order, and provides high throughput given sufficient buffering and a large number of threads to yield persist parallelism.
 
+{
+\singlespacing
+\newsavebox{\BufferPEO}
+\begin{lrbox}{\BufferPEO}
+  \begin{lstlisting}
+PEO:
+
+persist_bar (i)
+lock_acquire()
+dest = buffer[counter] # reads counter
+memcpy(buffer, entry) # persists buffer
+
+persist_bar (ii)
+counter += entry.size # persists counter
+lock_release()
+  \end{lstlisting}
+\end{lrbox}
+
+\newsavebox{\BufferTEO}
+\begin{lrbox}{\BufferTEO}
+  \begin{lstlisting}
+
+TEO:
+
+persist_bar (i)
+lock_acquire()
+
+persist_bar (ii)
+dest = buffer[counter] # reads counter
+memcpy(buffer, entry) # persists buffer
+
+persist_bar (iii)
+counter += entry.size # persists counter
+
+persist_bar (iv)
+lock_release()
+  \end{lstlisting}
+\end{lrbox}
+
+\begin{figure}[]
+\centering
+\subfigure{ \usebox{\BufferPEO} }
+\vspace{1 in}
+\subfigure{ \usebox{\BufferTEO} }
+\caption{\textbf{Buffer insert with PEO/TEO.} Pseudocode implements buffer insert with two persist barriers.  PEO's concurrent epochs allow epoch (ii) to persist in parallel with epoch (i) of the next insert operation. TEO simplifies persist-order reasoning, separating volatile races from persists.  PEO requires four barriers and introduces persist dependencies between persisting buffer data and the previous counter value.}
+\label{fig:buffer_PEO_pseudocode}
+\end{figure}
+}
+
 \textbf{PEO.} The bottom of Figure~\ref{fig:buffer_PEO_LPO} displays buffer execution for PEO -- partial epoch order.
 Partial epoch order allows single-thread persists to occur in parallel by placing them in epochs.
 Epochs across threads are ordered (or considered concurrent) according to the consistency model and memory sharing.
-By using epochs, PEO allows buffer data to persist in parallel, but may still order buffer persists with counter persists, and counter persists to subsequent buffer persists.
-The persist critical path forms a chain of two persist epochs per insert.
-Using our earlier assumptions, this model allows inserts every 200ns on average.
-While getting closer to the performance of modern volatile concurrent systems, this is still likely slower, and true NVRAM devices may require more than 100ns per serialized persist.
+PEO allows buffer data to persist in parallel, and removes ordering constraints between buffer persists and the previous counter persist from another thread (epochs are concurrent -- see Figure~\ref{fig:buffer_PEO_pseudocode}).
+However, buffer persists are ordered after buffer persists of the previous insert (solid arrows in the Figure), and ordered after counter persists from the same thread (dashed arrows in the Figure).
+
+Assuming subsequent inserts occur from different threads the persist critical path forms a chain of only one persist epoch per insert (either through the counters or through the buffer persists).
+Using our earlier assumptions, this model allows inserts every 100ns on average.
+Such delays are similar to invalidation delays in modern multi-socket CPU systems, but NVRAM may require more than 100ns per serialized persist.
 Furthermore, PEO requires frequent persist barriers, placing a burden on the programmer.
 While these epoch barriers are deemed intuitive, they are not as easy to use as sequential consistency (no barriers required) and are more complicated to reason about with multi-threading (as evident by BPFS allowing deadlocks).
 
+Reasoning about concurrent epochs is quite difficult.
+I provide a second implementation of buffer insert under PEO (Figure~\ref{fig:buffer_PEO_pseudocode}, bottom) that allows a total order of persist epochs (as intended by BPFS).
+Epochs in this implementation have either volatile races (lock/release) or persists, not both.
+Additionally, a barrier is still required to guarantee that buffer data persists before updating the counter.
+This implementation, while more obviously correct, increases persist critical path by introducing a dependence between counter persist and the next buffer data persist (the dashed arrow of Figure~\ref{fig:buffer_PEO_LPO} occurs even for cross-thread dependencies).
+
+
+\input{PMC_patterns/Fig.buffer_relaxed_elision.tex}
 \textbf{Relaxed persistent consistency.}
 Finally, I imagine a relaxed consistency model for this buffer, shown in Figure~\ref{fig:buffer_relaxed_elision} (top).
 I will not describe the semantics of this model, but rather the desired persist dependencies.
