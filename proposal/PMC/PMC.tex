@@ -57,16 +57,16 @@ Later sections will use these assumptions to reason about consistency model and 
 
 There are primarily two cases where persists may cause a thread to stall: ordering barriers and sync barriers.
 Ordering barriers may operate by stalling execution at the barrier until all previous persists complete.
-More complex memory systems will allow threads to continue executing ahead of persistent state, using a buffer to store persists (in the cache or elsewhere in the memory system), and later persisting in the proper order.
+More complex memory systems will allow threads to continue executing ahead of persistent state, buffering persists (in the cache or elsewhere in the memory system), and later persisting in the proper order.
 While decoupling volatile execution state and persistent state removes immediate stalls, these buffers may fill, forcing threads to stall until room becomes available.
 Therefore, persist throughput is the primary concern -- buffers allow threads to execute ahead of persistent state, but the average rate of persist must match the average rate of volatile execution, otherwise stalls necessarily occur.
 
 Persist throughput is primarily limited by the number of persist dependencies in an application.
-NVRAM memories will likely allow high throughput so long as persists may occur in parallel.
+NVRAM memories will allow high throughput so long as persists may occur in parallel.
 Persist dependencies reduce parallelism, requiring that some set of writes persist entirely before any dependent persists begin (necessary for proper recovery).
-Since NVRAM cells may take up to microseconds to persist, the longest dependence chain of persists will limit persist throughput, additionally limiting execution throughput when buffers fill.
+Since NVRAM cells may take up to microseconds to persist, the longest dependence chain of persists limits persist throughput, additionally limiting execution throughput when buffers fill.
 Persistent memory consistency models stand to improve throughput and reduce stalls by relaxing persist ordering constraints, minimizing the persist critical path to only the persist order dependencies necessary for recovery correctness.
-The ultimate goal is to reduce persist critical path sufficiently that persist throughput exceeds execution throughput, providing the throughput of a DRAM system with the persistence of NVRAM.
+The goal is to reduce persist critical path sufficiently that persist throughput exceeds execution throughput, providing the throughput of a DRAM system with the persistence of NVRAM.
 
 Persistent memory applications also introduce stalls at sync barriers.
 These are barriers used when interacting with the outside world (e.g., displaying something on-screen, communicating over the network).
@@ -77,20 +77,17 @@ Again, persist critical path determines sync latency; if independent writes pers
 Finally, a persistent memory consistency model may reduce performance if barriers intended to enforce persist order additionally enforce constraints on volatile execution (e.g., a persist barriers prevents memory instructions to volatile addresses from reordering).
 While I do not discuss this phenomenon further, I would like to investigate its effects in the future and would appreciate feedback.
 
-This chapter will propose persistent memory consistency models to relax persist constraints and improve NVRAM performance.
-First, however, I give a background in existing memory consistency models.
-This motivates why persistent consistency models will be important, what sort of consistency relaxations might improve performance, and what sorts of mechanisms ensure correctness when consistency is relaxed.
-Additionally, whereas persistent memory consistency models determine persist order, we still require volatile memory consistency models to determine execution values and cross-thread memory dependencies, which propagate persist order dependencies between threads.
-
+The remainder of this chapter proposes persistent memory consistency models to relax persist constraints and improve NVRAM performance.
 
 \section{Persistent Memory Consistency Models}
 \label{sec:PMC:PersistenceModels}
 
-While memory consistency models control the order that loads and stores are observed across threads, they give no guarantees on persistence.
+While memory consistency models restrict the order that loads and stores are observed across threads, they give no guarantees on persistence.
 I outline several persistent consistency models, starting with a constrained, strict model, and then considering more relaxed models.
 The purpose of these models is to provide correctness by defining the allowable persistent states during execution.
 Any implementation may only allow these persistent states.
 Implementations are free to insert further restrictions, disallowing additional persistent states.
+Additionally, implementations may \fixme{talk about speculation}
 Specific implementations are outside the scope of this proposal.
 I welcome any feedback.
 
