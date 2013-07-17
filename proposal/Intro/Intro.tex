@@ -74,6 +74,7 @@ To complete my dissertation I intend to investigate specific programming models 
 Whereas existing \emph{memory consistency} models provide control over the order and visibility of volatile memory reads and writes across threads, there are no equivalent models to reason about data persistence.
 Memory consistency may be relaxed, allowing communicating threads to each observe different memory read and write orders.
 Such memory consistency models improve performance, but require complex reasoning and additional programming mechanisms (memory barriers) to ensure expected behavior.
+Memory models are described in Section~\ref{sec:Background:MemoryConsistency}.
 
 Similarly, NVRAM write order may be relaxed, improving performance by allowing writes to occur in parallel or out of order.
 I define the rules that govern persistent write order as \emph{Persistent Memory Consistency}.

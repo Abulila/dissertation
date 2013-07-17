@@ -1,5 +1,6 @@
 This chapter motivates and defines \emph{Persistent Memory Consistency}.
 The ideas here constitute in-progress or future work and I welcome feedback.
+Refer to Section~\ref{Background:ConsistencyModels} for a discussion of existing memory consistency models.
 I first define the need for persistenct consistency and then give examples of persistent memory consistency models.
 In the next chapter I outline persistent programming patterns, why they require relaxed persistent consistency models, and possible optimizations.
 
@@ -13,15 +14,15 @@ Instead of considering an implementation or exact semantics of these barriers, I
 This chapter delves into the details of persist barriers, considering their implementation, performance impact, and programming model.
 
 Persist barriers exist as a tool for programmers to ensure correct persistence behavior, while at the same time improving performance.
-Without persist barriers programmers could only reason about persistent state if all persists truly occur in program order.
-This is in fact a popular model for DRAM programming, but the volatile semantics of DRAM allows writes to execute to fast, volatile caches and hardware buffers.
-NVRAM persists, on the other hand, must always execute to a long latency memory; executing all NVRAM persists in-order introduces frequent, substantial stalls.
+An alternative programming model requires that persists occur immediately -- execution does not continue until data persists successfully to NVRAM.
+Such a model guarantees on recovery that the persistent state resembles a valid interleaving of program orders from the various threads.
+That is, we observe some persistent state of sequentially consistent execution.
+Whereas Sequential Consistency is a popular model for DRAM programming, long latency NVRAM persists may incur substantial stalls on each persist.
 Persist barriers remove these stalls by allowing persists between barriers to occur in parallel.
-This is a prime example of using a more complicated programming model to enable performance optimizations.
 
-An alternative mechanism to enforce persist order is to flush select cache lines or flush the entire cache, either blocking until all data persists or receiving an acknowledgement/interrupt.
+Persist order may additionally be enforced by flushing select cache lines or flushing the entire cache, either blocking until all data persists or receiving an acknowledgement/interrupt.
 This model most closely matches existing disk interfaces, where the programmer invokes system calls to write individual pages and then calls a sync system call.
-However, this is a poor match for memory, where the programmer often has little control over how data is laid out (nor do we want programmers to reason about the memory/cache architecture).
+However, enforcing persistence via cache line flushing requires the programmer to reason about the cache architecture and data layout (e.g., considering if an object crosses cache line boundaries).
 Instead, we would like a more natural approach to reasoning about persistence that fits existing programming models.
 
 Additional questions remain when memory is shared between threads or processes.
@@ -37,13 +38,18 @@ In fact, the consistency and persistence models may be de-coupled.
 That is, the rules that define load and store order might be differ between how \emph{values} are communicated and how \emph{persist order} is enforced.
 
 I wish to extend memory consistency models with persistence semantics to address these concerns.
-My goals are to determine how multi-threaded consistency interacts with persistence, how to relax persistent consistency models to provide high performance and an easily programmable interfaces, and identify programming patterns likely to cause NVRAM performance bottlenecks alongside potential optimizations.
-All of these will eventually lead to the design of new persistent memory consistency models and implementations, yet that is outside the scope of this project.
+My goals are to determine how multi-threaded consistency interacts with persistence, how to relax persistent consistency models to provide high performance and easily programmable interfaces, and identify programming patterns likely to cause NVRAM performance bottlenecks alongside potential optimizations.
+While a comprehensive investigation into persistent memory consistency involves considering numerous consistency models, several implementations, and broad range of data structures, I wish to restrict this dissertation to motivating a need for persistent consistency models.
+To that end, I propose several relaxed consistency models.
+I will implement simple, significant persistent data structures with each of these models, and plan on developing an evaluation framework for these data structures and consistency models.
+Importantly, I \emph{do not wish to consider hardware implementations} of these models.
+While the performance of persistent systems will invariably depend on the implementation, I feel that a basic understanding of these consistency models is a substantial contribution in itself.
+My primary challenge is to devise an implementation-agnostic evaluation of these models and I welcome any feedback.
 
-The remainder of this chapter describes performance concerns for NVRAM and provides a brief background of memory consistency models before considering examples of persistent memory consistency models.
+The remainder of this chapter discusses the performance implications of persist dependencies before considering examples of persistent memory consistency models.
 In addition, I examine previous work, highlighting strengths and weaknesses, and placing it into my persistent memory consistency taxonomy.
 
-\section{Performance}
+\section{Implication of Persist Dependencies}
 \label{sec:PMC:Performance}
 
 Here I describe how I expect NVRAM, the memory system, and the programming model to affect performance.
@@ -76,40 +82,6 @@ First, however, I give a background in existing memory consistency models.
 This motivates why persistent consistency models will be important, what sort of consistency relaxations might improve performance, and what sorts of mechanisms ensure correctness when consistency is relaxed.
 Additionally, whereas persistent memory consistency models determine persist order, we still require volatile memory consistency models to determine execution values and cross-thread memory dependencies, which propagate persist order dependencies between threads.
 
-\section{Memory consistency models}
-\label{sec:PMC:MemoryConsistency}
-
-This section provides a background on memory consistency models, focusing on two simple models: Sequential Consistency (SC) and Total Store Order (TSO).
-For the remainder of this section I am referring solely to volatile writes without considering for NVRAM persists.
-This discussion assumes that caches are completely coherent -- that is, any two accesses to a cache line (by any core/thread) have a total order.
-While some relaxed memory models may allow reading of stale cached values, I do not consider that here.
-
-Consistency models define the order of loads and stores observed by threads.
-While every thread observes its own execution in program order, it may appear that remote threads execute out of order.
-Processors (and compilers) are generally free to reorder instructions to accelerate performance so long as they produce equivalent results assuming no shared memory accesses (single thread execution).
-Loads and stores that are independent from a single-threaded point of view may in fact interact with other threads.
-Reordering these memory accesses often results in unintended program behavior.
-
-Two popular solutions to this problem are to 1) force all threads to observe the loads and stores of other threads in a globally defined order (SC) or 2) relax this guarantee, introducing memory barriers that allow the programmer to enforce a certain order when necessary (e.g., TSO).
-While relaxing consistency may provide higher performance, it places a greater burden on programmers to be aware of instruction reordering and correctly use memory barriers.
-
-\textbf{Sequential Consistency.}
-Sequential consistency provides the most intuitive programming model, yet necessarily the worst performance (although modern techniques involving speculation improve performance).
-All loads and stores appear in a globally consistent order that is an interleaving of program order of all threads.
-The programmer need not consider memory instructions reordering; barriers are unnecessary.
-
-\textbf{Total Store Order.}
-TSO provides greater performance than SC at the cost of requiring the programmer to insert memory barriers.
-Most memory operations in each thread are still observed to occur in program order: 1) stores may not reorder with other stores, 2) loads may not reorder with other loads, and 3) a store that occurs after a load may not reorder and appear to occur before that load.
-This guarantees that all stores occur in a globally consistent sequential order.
-However, loads that occur after a store in program order may reorder and bypass the store, appearing to occur before the store.
-The justification for doing this is that stores are typically not on the application's critical path -- they simply write into the cache and do not result in delays.
-Loads, on the other hand, may stall due to cache misses.
-Executing loads as soon as possible minimizes delays.
-
-The programmer is responsible for recognizing any code where allowing a load to bypass a store causes an incorrect result.
-In this case, a barrier is provided by the architecture to force all loads to delay until the store appears to other threads (or re-execute those loads if some other thread issues conflicting stores).
-I believe a similar trade off exists for persistence -- in order to gain performance we relax persistence constraints so that persist order may not match program order and may not appear as a valid interleaving of all persists.
 
 \section{Persistent Memory Consistency Models}
 \label{sec:PMC:PersistenceModels}
