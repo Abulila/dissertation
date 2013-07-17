@@ -23,7 +23,7 @@ I analyze traces at cache line (64 bytes) and page (8KB) granularity.
 These traces provide insight into how Shore-MT accesses persistent data, summarized in Table~\ref{table::AccessCharacteristics}.
 Index accesses represent the great majority of cache line accesses, averaging 84\% of accesses to NVRAM across workloads.
 Any caching efforts should focus primarily on index pages and cache lines.
-Note also that indeces access a greater number of cache lines per page access than other page types (average 11.54 vs 5.20 per store and 3.39 per other page types), suggesting that uncached index page accesses have the potential to introduce greater delays. 
+Note also that indexes access a greater number of cache lines per page access than other page types (average 11.54 vs 5.20 per store and 3.39 per other page types), suggesting that uncached index page accesses have the potential to introduce greater delays. 
 
 \textbf{Throughput.}
 \input{OLTP_eval/Fig.ReadPerformance.tex}
@@ -203,24 +203,26 @@ I intend to include a quantitative study of this behavior.
 
 \textbf{Device lifetime.}
 NVRAM technologies, much like Flash memory currently, will have limited write endurance; each cell may only be reliably written to a finite number of times.
-Previous work suggests hardware techniques to evenly spread writes amongst cells.
-The recovery mechanisms presented here each produce varying persist rates with different abilities to naturally spread persists across addresses/cells.
-I intend to study expected device lifetime for each recovery mechanism, both assuming that persists to an address always persist to the same cell, and assuming hardware that evenly spreads persists across cells.
+Device lifetime is generally determined by the most frequently written addresses.
+Previous work proposes hardware techniques to evenly distribute writes amongst cells by constantly changing the mapping between between memory addresses and the underlying memory cell \cite{QureshiKaridis09}.
+These techniques prolong device lifetime by ensuring that frequently written addresses do not wear out individual cells.
+While the recovery mechanisms presented here each produce varying persist rates with different abilities to naturally distribute persists across addresses, it is unclear if software mechanisms are sufficient to prolong device lifetime.
+I intend to study expected device lifetime for each recovery mechanism, both assuming that persists to an address always persist to the same cell, and assuming hardware that evenly distributes persists across cells.
 
-When persist-levelling hardware is not available \NVDisk manages to prolong lifetime the best of the three recovery mechanisms.
-Centralized logs evenly persist to the entire log address space, which can be large.
-Further, writes to individual pages can be bounded by limiting the page flush rate, although at the cost of recovery latency.
-\InPlace performs worst in terms of device lifetime.
+When wear-levelling hardware is unavailable \NVDisk manages to prolong lifetime the best of the three recovery mechanisms.
+Centralized logs evenly persist to the entire log address space.
+Writes to individual pages may be bounded by limiting the page flush rate, although at the cost of recovery latency.
+\InPlace provides the shortest device lifetime.
 Updates to hot pages and addresses persist each distinct value, quickly wearing out hot cells.
-\GroupCommit behaves reasonably, but is insufficient to provide lifetime guarantees for expected phase-change write endurance.
-Persists coalesce within each batch.
-This bounds persists to a single write per cell per batch.
-However, as batches are short to lower transaction latency (on the order of 10ms) hot addresses continue to wear out quickly.
+\GroupCommit limits writes to hot address, but is insufficient to provide lifetime guarantees for expected phase-change write endurance.
+Persists coalesce within each batch, bounding persists to a single write per cell per batch.
+However, batches are sufficiently short that hot addresses still experience a high write-rate, wearing out quickly.
 
 The story changes when hardware spreads persists across NVRAM cells.
-The primary concern becomes the total number of persists.
+With wear-levelling the primary concern is the total number of persists; all cells experience the same number of persists.
 While \GroupCommit outperforms \NVDisk and \InPlace in this regard, none of the recovery mechanisms pose a device lifetime concern.
-Simply put, an insufficient amount of data persists to worry about device lifetime in the presence of hardware wear-leveling.
+Simply put, an insufficient amount of data persists to worry about device lifetime in the presence of hardware wear-levelling.
+I will include a quantitative evaluation of device lifetime by measuring the rate that persists occur to individual addresses.
 
 \section{Conclusion}
 \label{sec:OLTP_eval:Conclusion}
