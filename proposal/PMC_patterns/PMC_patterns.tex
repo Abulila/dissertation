@@ -34,7 +34,7 @@ Every atomically persistable segment (8 bytes) of buffer data persists in serial
 The next thread to insert into the buffer reads the counter, a shared variable, ordering all subsequent persists after persists of the previous insert.
 Assuming log entries are 100 bytes on average, each insert requires 14 serial persists (13 to persist the log entry data, 1 to persist the counter).
 If NVRAM persists take even 100ns (a conservative estimate), entries can only be inserted every 1.4\textmu s, on average (any faster and buffers will eventually fill).
-This rate is significantly slower than the throughput of modern concurrent buffers, where cache invalidations take anywhere from 10s to 100s ns (multi-core to multi-socket, respectively).
+This rate is significantly slower than the throughput of modern concurrent buffers, where cache invalidations take anywhere from tens to hundreds of nanoseconds (multi-core to multi-socket, respectively).
 Without relaxed persistent memory consistency models, NVRAM persists will necessarily create a throughput bottleneck.
 
 
@@ -153,15 +153,22 @@ It remains unclear if this property should be leveraged by hardware or in the co
 
 Finally, I consider a persistent linked list, shown in Figure~\ref{fig:LinkedList}.
 The linked list contains a persistent Head reference, persistent nodes (each containing a \emph{next} reference), and a volatile Tail reference to quickly find the end of the list for insertion (although I assume that at recovery the list will only be traversed from the Head).
+The top of the figure shows the list, with arrows representing \emph{nexst} references.
 Unlike the persistent buffer, where log entries persist in parallel and the counter is overwritten, the linked list does not overwrite any values as new nodes are added.
 For correctness, node data must persist before the node \emph{next} reference pointing to that data.
-However, strict persistent consistency models will enforce that all nodes persist in the order that they are inserted into the list (dependencies shown as dotted lines in the bottom of the Figure).
-Ignoring sync operations briefly, it would be correct to allow nodes to persist in parallel (references persisting after associated data), and simply determine the persistent and valid portion of the list at recovery.
-Doing so bounds the persist critical path to a constant.
 
+Strict persistent consistency models will enforce that nodes persist in the order they are inserted.
+Nodes persist in series, each waiting for the previous node to completely persist (references still persisting after the data they point to).
+However, such operation forms a persist dependence chain, limiting persist throughput.
+Instead, we would like to allow persist nodes to persist in parallel, yet continue to enforce node data-before-reference persist orders.
+The valid portion of the list is determined at recovery by traversing the list from the Head, truncating the list at the first null or invalid reference.
+
+I do not describe how this list likely performs for my persistent consistency models, but simply note the desired behavior.
+High performance consistency models will limit persist dependence chains, avoiding the need to persist in series.
 However, there is now no efficient way to sync the list.
+While we do not constrain the order in which data persists we still need some mechanisms to \emph{observe} when a specific portion of data has persisted -- that is, we must be able to tell when a node and all preceding nodes have persisted.
 The programmer may determine that the entire list is persistent (or block until it persists) by traversing the list, adding substantial complexity and overhead.
-This is an interesting design for persistent lists that require high throughput, rarely sync, and prefer linked lists (to insert or remove in the middle).
+Thus, this persistent linked list is an interesting design for applications that require high throughput, rarely sync, and require linked lists (to insert or remove nodes from the middle).
 Faster, more efficient, yet intuitive sync design remains an interesting challenge.
 
 \section{Conclusion and Future Work}

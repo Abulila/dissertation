@@ -42,9 +42,9 @@ My goals are to determine how multi-threaded consistency interacts with persiste
 While a comprehensive investigation into persistent memory consistency involves considering numerous consistency models, several implementations, and broad range of data structures, I wish to restrict this dissertation to motivating a need for persistent consistency models.
 To that end, I propose several relaxed consistency models.
 I will implement simple, significant persistent data structures with each of these models, and plan on developing an evaluation framework for these data structures and consistency models.
-Importantly, I \emph{do not wish to consider hardware implementations} of these models.
+Importantly, I do not wish to consider hardware implementations of these models.
 While the performance of persistent systems will invariably depend on the implementation, I feel that a basic understanding of these consistency models is a substantial contribution in itself.
-My primary challenge is to devise an implementation-agnostic evaluation of these models and I welcome any feedback.
+My primary challenge is to devise an evaluation of these models independent of their implementations; I welcome any feedback.
 
 The remainder of this chapter discusses the performance implications of persist dependencies before considering examples of persistent memory consistency models.
 In addition, I examine previous work, highlighting strengths and weaknesses, and placing it into my persistent memory consistency taxonomy.
@@ -85,11 +85,8 @@ The remainder of this chapter proposes persistent memory consistency models to r
 While memory consistency models restrict the order that loads and stores are observed across threads, they give no guarantees on persistence.
 I outline several persistent consistency models, starting with a constrained, strict model, and then considering more relaxed models.
 The purpose of these models is to provide correctness by defining the allowable persistent states during execution.
-Any implementation may only allow these persistent states.
-Implementations are free to insert further restrictions, disallowing additional persistent states.
-Additionally, implementations may \fixme{talk about speculation}
-Specific implementations are outside the scope of this proposal.
-I welcome any feedback.
+Implementation may only allow these persistent states to be observed at recovery and are free to insert further restrictions, disallowing additional persistent states.
+Additionally, implementations are free to introduce any optimizations so long as programs are never able to detect a state outside the consistency model (e.g., speculation, in-hardware logging).
 
 \subsection{Persistent Sequential Consistency}
 \label{sec:PMC:PersistenceModels:PSC}
@@ -98,7 +95,7 @@ The first model couples persistence to the sequential consistency model as Persi
 This model requires that the underlying volatile memory consistency model is sequential consistency.
 All loads and stores (including persists) appear to occur in a globally defined order as an interleaving of threads' valid program orders.
 Whereas volatile memory systems provide this solely by controlling the order in which memory actions become visible from each processor, NVRAM used for recovery must treat every point in time as a possible failure, observing the persistent state.
-Achieving a globally consistent persist order requires that persists \emph{actually} occur in-order from each thread, or that sequential batches of persists occur atomically, so that failure may not observe an intermediate state (NVRAM's atomically persistable size is likely to be small -- 8 bytes usually assumed).
+Achieving a globally consistent persist order requires that persists \emph{actually} occur in-order from each thread, or that sequential batches of persists occur atomically, so that failure may not observe an intermediate state (NVRAM's atomically persistable size is likely to be small -- 8 bytes).
 Additionally, all data sharing propagates ordering dependencies between persists.
 
 {
@@ -144,9 +141,10 @@ This strict model does not require a sync barrier.
 A slight relaxation allows volatile state to advance ahead of persistent state, so long as (1) both the volatile and nonvolatile state are valid sequential executions, and (2) the persistent state matches some previous volatile state.
 This optimization does require a sync barrier; communicating with the outside world requires persistent state catch up with volatile state.
 
-The problem with PSC is that all persists within a thread are ordered, and all shared memory accesses additionally order persists.
+PSC requires all persists within a thread are ordered, and all shared memory accesses additionally order persists.
 This is also what makes PSC the most intuitive programming model.
 When persist latency is large (expected to be at least hundreds of nanoseconds up to several microseconds) every persist incurs this penalty; there is no opportunity to execute persists from the same thread in parallel.
+However, novel implementations might satisfy the PSC model and provide better performance (just as sequential consistency speculates, re-executing memory instructions when SC is violated).
 The next model relaxes the multi-threaded persist-order constraints.
 
 \subsection{Local Persist Order}
@@ -182,6 +180,7 @@ A thread may enforce that all local persists occur before persists from other th
 Such \emph{persist order-before} barriers are useful for communicating persistence to another thread.
 A thread may enforce that all remote persists occur before subsequent local persists in a \emph{persist order-after}, useful for reading persists from remote threads.
 Both of these may be combined in a \emph{persist total-order}, allowing a thread to completely order all persistent updates with other threads.
+These barriers are influenced by the \emph{acquire} and \emph{release} barriers of Release Consistency, where barriers enforce an order in only one direction.
 While these define persistent state, execution still relies on an underlying consistency model to determine what values are communicated and which threads interact.
 
 The batching example might enforce batch persistence by having all transaction, once done persisting data, emit a \emph{persist order-before} and atomically increment a counter/semaphore (initialized to 0).
@@ -200,7 +199,7 @@ Strict models, such as PSC, order persists between threads, increasing persist c
 LPO, on the other hand, removes such dependencies, except where explicitly created by persist barriers.
 Since threads persist independently, adding threads provides additional persist throughput, similarly to Symmetric Multi Threading (SMT), which provides memory parallelism on existing systems.
 LPO, then, is an appropriate model where threads persist independently (no sharing occurs) or where memory sharing should not enforce persist order (such as batching).
-However, the need to perform all persists in serial within a thread remains a concern.
+However, the need to perform all persists in series within a thread remains a concern.
 The Byte Addressable File System (BPFS) addresses intra-thread persist dependencies by introducing additional persist barriers.
 
 \subsection{Byte Addressable Persistent File System}
@@ -208,12 +207,13 @@ The Byte Addressable File System (BPFS) addresses intra-thread persist dependenc
 
 The Byte Addressable Persistent File System (BPFS) \cite{ConditNightingale09} is the de-facto standard for existing persistent memory consistency models, used additionally by \cite{CoburnCaulfield11, FangHsiao11, VenkataramanTolia11}.
 Threads persist by writing to the persistent address space, enforcing persist order via \emph{epoch barriers} which divide persists into \emph{epochs}.
-Persists may not reorder across epoch barriers, but persists within an epoch are free to execute in parallel.
+Persists may not reorder across epoch barriers, but persists within an epoch are free to execute in parallel; BPFS provides a relaxed persistent consistency model (persists may occur out of program order) and uses barriers to enforce constraints.
 BPFS additionally provides a hardware design, enforcing persist order with only cache modifications (little additional buffering or modifications to the memory system).
-A table of epochs is kept in the cache of each CPU, with each cache line keeping track of its persist epoch number and process/thread ID.
-The cache writes back in the background, making sure that each epoch persists completely before starting to flush the next epoch.
+A table of epochs is kept in the cache of each CPU, with each cache line keeping track of its persist epoch number and process/thread ID (even cache lines with only volatile writes track persist epoch).
+Persists buffered in the cache write back in the background, making sure that each epoch persists completely before starting to flush the next epoch.
 
-Data sharing and persist order is enforced strictly by stalling.
+Shared memory accesses enforce an ordering constraint between the epoch that produced the write and the epoch reading/overwriting that data.
+This persist order is enforced strictly by stalling.
 If at any point a thread overwrites a cache line from a previous persist epoch (even from the same thread), it stalls until the previous persist epoch completes persisting.
 Further, if a thread reads a cache line from a persist epoch produced by a remote thread that has not yet persisted it also stalls until that epoch completes persisting (it does not stall if the reading thread is the same as the producing thread).
 Persists within epochs write to the device in parallel, volatile execution proceeds ahead of persistent state, and cross-thread persist order is correctly enforced (at the cost of stalls).
@@ -223,13 +223,15 @@ Persists within epochs write to the device in parallel, volatile execution proce
 Consider the ARIES log from Chapter~\ref{chap:OLTP_design}, demonstrated in \texttt{persist\_wal} (Figure~\ref{fig::Code}) with persist dependencies shown in Figure~\ref{fig:persist_wal_persist}.
 Persisting a single entry requires first persisting the entry's body, followed by the tail LSN.
 Most log entries are large (at least 100 bytes), containing information about the transaction, store, page, tuple, and action taken.
-According to PSC and LPO all persists (8 byte segments) to the log entry body must occur in order -- an unnecessary constraint that increases persist critical path.
+According to PSC and LPO all persists (8 byte segments) to the log entry body must occur in program order -- an unnecessary constraint that increases persist critical path.
 Instead, BPFS allows the entire log entry body to persist in parallel, and guarantees that the body persists before the LSN using a persist barrier.
 
-In consistency terms BPFS attempts to produce a total ordering of epochs that all threads observe (Total Epoch Order -- TEO -- would be a great name for this model).
+In consistency terms BPFS produces a total ordering between persist epochs that communicate through memory (Total Epoch Order -- TEO -- would be an appropriate name for this model).
 This ordering resembles transactional memory -- producing a total order on memory transactions -- except BPFS does not provide concurrency control (conflicts are not detected and transactions can not roll back).
-However, attempting to provide a total epoch order produces problems; multi-threaded BPFS execution may result in deadlock and restricts useful programming patterns.
-I will demonstrate that the implementation as described allows deadlock.
+However, attempting to provide a total epoch order produces problems; races (data or synchronization) within BPFS epochs may result in deadlock.
+The authors specifically prohibit races within their implementation, possibly recognizing that they introduce deadlocks.
+However, preventing synchronization races restricts useful programming patterns.
+I will demonstrate that the implementation as described allows deadlock and later provide example applications that make use of races.
 
 {
 \singlespacing
@@ -295,6 +297,7 @@ I next introduce a model strongly influenced by BPFS, that allows concurrent epo
 The third and final model relaxes persist order within a thread similarly to BPFS, but produces only a partial order of epochs between threads.
 Partial Epoch Order (PEO) considers the epochs of two threads that communicate through memory to be \emph{concurrent}, and thus not ordered.
 However, later epochs \emph{do} carry the dependence, allowing ordering of persists between threads while avoiding deadlock and allowing inter-thread persist concurrency.
+When races do not occur within epochs PEO provides the same execution as BPFS.
 As in LPO persists from concurrent epochs to the same address must have a total order, provided by the underlying consistency model.
 
 {
@@ -308,28 +311,28 @@ persist_bar (i)
 persist A
 
 persist_bar (ii)
-persist X
-write C
+persist B
+write X
 
 persist_bar (iii)
-persist D
+persist C
   \end{lstlisting}
 \end{lrbox}
 
 \newsavebox{\PEOThreadTwo}
 \begin{lrbox}{\PEOThreadTwo}
   \begin{lstlisting}
-Thread 1:
+Thread 2:
 
 persist_bar (i)
-persist B
+persist D
 
 persist_bar (ii)
-read C
-persist Y
+read X
+persist E
 
 persist_bar (iii)
-persist E
+persist F
   \end{lstlisting}
 \end{lrbox}
 
@@ -344,18 +347,18 @@ persist E
 }
 
 Figure~\ref{fig:PEO} provides an example.
-Two threads persist data and communicate, each with three epochs.
-Communication occurs in epoch (ii) of each thread -- thread 1 writes to (volatile) address C, which thread 2 reads.
+Two threads persist data and communicate through volatile object X, each persisting three epochs.
+The threads communicate when thread 1, epoch (ii) writes to X, which thread 2 reads in its epoch (ii).
 According to PEO, epochs (ii) of each thread are concurrent and do not enforce a persist order.
-Thus, thread 1's persist to X may not necessarily occur before thread 2's persist to Y.
-However, epochs of thread 1 prior to (ii) must necessarily persist before epochs of thread 2 after (ii).
-Thread 2's persist to A must persist before thread 2's persist to E -- epochs containing shared memory accesses are concurrent, but later epochs carry the persist dependence.
-The converse is not true -- thread 2's persist to B need not persist before thread 1's persist to D.
+Thus, thread 1's persist to B may not necessarily occur before thread 2's persist to E.
+However, epochs of thread 1 prior to (ii) must necessarily persist before epochs of thread 2 after (ii) -- When thread 2 reads a value from thread 1 it orders all later persist epochs after thread 1's earlier epochs.
+Thread 1's persist to A must occur before thread 2's persist to F -- epochs containing shared memory accesses are concurrent, but later epochs carry the persist dependence.
+The converse is not true -- thread 2's persist to D need not persist before thread 1's persist to C.
 This model produces a partial ordering of persist epochs that all threads observe.
 
 PEO removes the possibility of deadlock by relaxing persist order constraints.
 However, PEO supports the same programming model as BPFS (a total epoch order).
-Any program who's epochs contain only volatile races, or only persists (never both) will produce a total order on epochs containing persists, resulting in the same execution as BPFS.
+Any program who's epochs contain only volatile races, or only persists (never both) will produce a total order on epochs containing shared memory persists, resulting in the same execution as BPFS.
 Additionally, PEO's relaxed constraints allow advanced programming models such as batching.
 Neglecting undo log (which must persist before store data) transactions in a batch may all execute within the same persist epoch.
 Since these epochs are concurrent no persist order is enforced between persists of different threads.
