@@ -203,18 +203,18 @@ As described previously, \GroupCommit requires each batch to track dirty data.
 This is done with an efficient concurrent set, tracking the set of buffer pool cache lines dirtied by each batch.
 In order to maximize transaction throughput, this set must allow low overhead updates by concurrent threads during batch execution, and fast iteration during batch persist.
 
-The first attempt to create a set used an STL \emph{ordered\_set} (implemented as a balanced tree).
-However, inserting cache lines to the dirty set was prohibitively expensive, slowing transactions down.
-On the other hand, \emph{ordered\_set} allows relatively fast iteration over the dirty set during batch copy.
-The next attempt used a bitmap of dirty cache lines, each bit corresponding to a cache line in the buffer pool.
-A 12GB buffer pool requires 192MB of bits to track dirty cache lines.
-Before each batch starts, after the previous batch finishes persisting, dirty bits must be flash cleared in order to track the next batch.
-While bits can be quickly updated via an atomic OR operation, iterating over the dirty bits during persist was slow.
+Conventional implementations of set data structures prove insufficient.
+A set may be structured as a balanced tree, each node being a range of the dirty set.
+While such an implementation allows efficient iteration over the set between batches it imposes overheads to transaction execution (as transactions repeatedly search the set for the region they are about to modify).
+Instead, the set might be designed as a bitmap of dirty cache lines, each bit corresponding to a cache line in the buffer pool.
+A 12GB buffer pool requires 192MP of bits to track dirty cache lines.
+This set is efficiently updated with atomic OR operations and cleared at the beginning of each batch.
+However, iterating over the batch to return dirty addresses is too slow (compared to 10ms batch periods).
 
-Instead, I leveraged the observation that dirty regions were rare and sparsely located throughput the buffer pool.
-Batches contain up to thousands of transactions, yet these transactions could only manage to write to a small portion of a 12GB buffer pool.
+Instead, I leverage the observation that dirty regions are rare and sparsely located throughput the buffer pool.
+Batches contain up to thousands of transactions, yet these transactions can only write a small portion of a 12GB buffer pool.
 It is therefore necessary to efficiently skip large regions of clean data when iterating through the dirty set.
-To achieve this, I created a \emph{tiered bitfield set}.
+To achieve this, I present a \emph{tiered bitfield set}.
 The tiered bitfield set contains two bitfields.
 The first is as described above, where each bit corresponds to a cache line in the buffer pool, referred to as the \emph{primary bitfield}.
 In addition, there is a higher level bit field, each bit corresponding to a cache line of the primary bit field, called the \emph{top level bitfield}.
