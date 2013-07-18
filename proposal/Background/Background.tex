@@ -6,7 +6,7 @@ The purpose of discussing database optimizations is to understand the complicati
 \label{sec:Background:Storage}
 
 I start with a survey of storage technologies including disk, Flash, and upcoming NVRAM.
-For each, I provide the operating principles and interesting technological trends.
+For each, I provide the operating principles and important technological trends.
 
 \input{Background/tab.devices.tex}
 
@@ -18,13 +18,13 @@ Disks function by storing data on spinning magnetic platters.
 Accessing data requires moving the \emph{hard disk head} onto the proper \emph{track}.
 Once the head settles, it may read or write data as the platter rotates and the correct sector within the track reaches the head.
 Disk capacity increases with the areal size and number of platters, as well as areal density (placing more sectors and tracks within the same area).
-Because capacity has scaled so well (and continues to), disk remains an important technology for large datasets and persistent storage.
+Because capacity has scaled so well (and continues to), disk remains the lowest cost technology for large datasets and persistent storage.
 
 While dominant, disk exhibits relatively slow access and undesirable access behavior \cite{RuemmlerWilkes94}.
 Rotational speed limits the rate that data transfers to or from the disk.
 Further, random reads and writes must first seek to the proper track and then wait until the sector of interest reaches the head, a process which takes several ms.
-Table~\ref{table:DiskCharacteristics} lists the measured performance characteristics of an enterprise disk.
-This disk achieves nearly 120 MB/s sequential transfers, but random reads take an average of 10ms (only 50 KB/s for 512 byte sectors!).
+Table~\ref{table:DiskCharacteristics} lists the measured performance characteristics of an enterprise disk (2011).
+This disk achieves nearly 120 MB/s sequential transfers, but random reads take an average of 10ms (only 50 KB/s for 512 byte sectors).
 As a result, there is a large history of optimization for disk-resident storage, as I discuss later in the chapter.
 
 \subsection{Flash Memory}
@@ -88,23 +88,27 @@ NVRAM will eventually connect via a memory interface, but it is unclear how stor
 \label{sec:Background:Analytics}
 
 Large scale data processing requires efficient use of storage devices.
+Relational data is stored in tables (relations).
+Tables contains lists of rows (tuples), each containing values for the different columns (attributes) defined on the table.
 I discuss two important operators within the relational model most affected by Flash's performance characteristics: scans and joins.
 
 \subsection{Scans}
 \label{sec:Background:Scans}
 
-Whenever a query accesses a table, the query optimizer must choose an access path for that table. 
+Whenever queries access data the query optimizer must choose access paths to each table. 
 The goal is to select all relevant rows from the table while touching the least number of storage pages, frequently with the use of indexes.
 Work on access path selection dates back to the late 1970s \cite{Selinger1979}.
+
 There are two classic scan operators implemented by nearly all commercial DBMS systems: \emph{relation scan} and \emph{index scan}.
-An index is a database data structure that maps values to rows, supporting fast look-ups.
-Additionally, indexes may be ordered (as in an in-memory balanced tree or disk-resident B-Tree) to efficiently retrieve all rows satisfying a range query (e.g., an ordered index on ``last name" would accelerate a query asking for all people whose last name is between ``Pelley" and ``Wenisch").
-Indexes are themselves stored on disk.
+An index is a database data structure that maps column values to rows within a table, supporting fast look-ups.
+Indexes may be ordered (as in an in-memory balanced tree or disk-resident B-Tree) to efficiently retrieve all rows satisfying a range query (e.g., an ordered index on ``last name" would accelerate a query asking for all people whose last name is between ``Pelley" and ``Wenisch").
+Additionally, indexes may be clustered (the primary table is stored in sorted/hashed order and supports searching) or non-clustered (the index is separate from the primary store and contains references to rows).
+A table can only be ordered according to one key, limiting the use of clustered indexes.
+Database indexes are themselves stored on disk.
 Many types of indexes exist, but all that must be considered here is that they provide a more direct way to filter specific data than scanning an entire data set.
 
 When no indexes are available, the only choice is to perform a \emph{relation scan}, where all data pages in the table are read from disk and scanned tuple-by-tuple to select tuples that satisfy the query.
 When a relevant index is available, the DBMS may instead choose to perform an \emph{index scan}, where the execution engine traverses the relevant portion of the index and fetches only pages containing selected tuples as needed.
-
 For clustered indexes (i.e., the row itself exists within the index, and all rows are sorted according to the index key), an index scan is nearly always the preferred access path, regardless of the underlying storage device.  
 For non-clustered indexes, whether the optimizer should choose a relation scan or index scan depends on the selectivity of the query; relation scans have roughly constant cost regardless of selectivity (cost depends on table size), whereas index scan costs grow approximately linearly with selectivity.
 When selectivity is low, the index scan provides greater performance because it minimizes the total amount of data that must be transferred from disk.
@@ -121,11 +125,12 @@ This operation exists under several names.
 My description here fits the query plan explanation provided by IBM's DB2.
 Other databases use different terminology or algorithms to ensure that each store page is fetched exactly once (for example, PostgreSQL uses a bitmap index, sorting the list of pages with tuples that satisfy the query \cite{PostgresLossyBitMap}).
 Rowid-sort scan is the optimal access path for intermediate selectivities.
+Section~\ref{sec:FlashOpti:Scans} investigates when optimal access path selection changes between disk and Flash.
 
 \subsection{Joins}
 \label{sec:Background:Joins}
 
-One of the most important aspects to query optimization is choosing appropriate join algorithms for queries.
+One of the most important aspects of query optimization is choosing appropriate join algorithms for queries.
 The development of join algorithms and optimization strategies dates back over 30 years \cite{Selinger1979,Shapiro1986}. 
 Most commercial DBMS systems implement variants of at least three join algorithms: nested-loop join, sort-merge join, and hybrid hash join.
 At a high level, the nested-loop join iterates over the inner relation for each tuple of the outer relation; the sort-merge join sorts both relations and then performs concurrent scans of the sorted results; and the hybrid hash join forms in-memory hash tables of partitions of the inner relation and then probes these with tuples from the outer relation.
@@ -143,9 +148,9 @@ Sections~\ref{sec:FlashOpti:Scans} and~\ref{sec:FlashOpti:Joins} will investigat
 \section{Durable and Recoverable Transactions}
 \label{sec:Background:Recovery}
 
-Many database applications require transaction semantics commonly described as ACID (Atomic, Consistent, Isolated, Durable).
-While the first three are primarily controlled by the database's concurrency control mechanisms within main memory, transaction durability and database recovery interacts with persistent storage.
-The goal of recovery management is to ensure that during normal transaction processing no transaction reports that it has commit and is later lost after a system failure, and that any transaction that fails to commit before a failure is completely removed (i.e., no partial updates remain).
+Many database applications require transaction semantics commonly described as ACID (Atomic, Consistent, Isolated, Durable) \cite{Gray81}.
+While the first three are primarily impacted by the database's concurrency control mechanisms within main memory, transaction durability and database recovery interacts with persistent storage.
+The goal of recovery management is to ensure that during normal transaction processing no transaction reports that it has committed and is later lost after a system failure, and that any transaction that fails to commit before a failure is completely removed (i.e., no partial updates remain).
 Additionally, recovery should occur as quickly as possible and allow efficient forward processing.
 Several schemes provide correct, high performance recovery for disk.
 I describe ARIES \cite{MohanHaderle92}, a popular Write Ahead Logging (WAL) system that provides atomic durable transactions.
@@ -153,20 +158,19 @@ I describe ARIES \cite{MohanHaderle92}, a popular Write Ahead Logging (WAL) syst
 \textbf{ARIES.}
 ARIES uses a two-level store (disk and volatile buffer cache) alongside a centralized log.
 The buffer cache is necessary to accelerate reads and defer writes to the disk.
-Transaction writes coalesce in the buffer cache while persisting to the log as ordered entries that describe page updates and actions, transforming random writes into sequential writes.
+Transaction writes coalesce in the buffer cache while being durably recorded in the log as ordered entries that describe page updates and actions, transforming random writes into sequential writes.
 
-The log improves disk write performance while simultaneously provides data recovery after failure.
+The log improves disk write performance while simultaneously providing data recovery after failure.
 Transaction updates produce both redo and undo entries.
-Redo logs record actions performed on store pages so that they can be replayed if data has not yet persisted in-place.
+Redo logs record actions performed on store pages so that they can be replayed if data has not yet written to disk in-place.
 Undo logs provide roll back operations necessary to remove aborted and uncommitted transaction updates during recovery.
 The database occasionally places a checkpoint in the log, marking the oldest update within the database still volatile in the buffer cache (and therefore where recovery must begin).
-Recovery replays the redo log this point to the end, reproducing the state at failure in the buffer cache and store; ARIES ``replays history," recovering the failed database.
+Recovery replays the redo log from the most recent checkpoint to the log's end, reproducing the state at failure in the buffer cache and store; i.e., ARIES ``replays history," recovering the failed database.
 Afterwards, incomplete transactions are removed using the appropriate undo log entries.
-Undo log entries contain a transaction number and refer to the previous entry generated from the same transaction.
 
-While a centralized log orders all database updates, the software additionally enforces that log entries persists before the store page for every operation.
-Transactions commit by generating a commit log entry, which must necessarily persist after the transaction's other log entries (since the log persists in order).
-This process guarantees that no transaction commits, or page persists, without a durable history of its modifications in the log.
+While a centralized log orders all database updates, the software additionally enforces that log entries are durable before the store pages write back for each operation.
+Transactions commit by generating a commit log entry, which must necessarily become durable after the transaction's other log entries (since the log writes to disk in order).
+This process guarantees that no transaction commits, or page writes back to disk, without a durable history of its modifications in the log.
 
 Though complex, ARIES improves database performance with disks.
 First, log writes appear as sequential accesses to disk, maximizing device throughput.

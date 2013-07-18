@@ -1,4 +1,4 @@
-This chapter attempts to determine if database query optimizers must be SSD-aware.
+This chapter determines if database query optimizers must be SSD-aware.
 The work was originally published in the Second International Workshop on Accelerating Data Management Systems Using Modern Processor and Storage Architectures (AMDS 2011), collocated with VLDB \cite{PelleyWenisch11}.
 I worked on this project with my advisor, Thomas F. Wenisch, and assistant professor Kristen LeFevre.
 Working under their advisement, I was the sole graduate student and technical contributor (database and programming effort).
@@ -63,8 +63,8 @@ Both the hard disk and SSD were new at the beginning of the experiments.
 While other work has shown that SSD performance may degrade over the lifetime of the device I did not observe any change in performance.
 
 Note that I am not concerned with the optimization decisions that DB2 presently makes for either disk or SSD; rather, I am seeking to determine the ground truth of which algorithm a correct optimizer should prefer for each storage device. 
-Originally, I achieved this by varying input parameters to the query optimizer, namely the disk seek latency and sequential access throughput.
-Ultimately I discovered that query plan can be established directly by the user, and used DB2's optimization profiles to explicitly set the query plan for each query.
+In general, multiple query plans are achieved by varying the optimizers inputs -- disk random and sequential access latencies.
+Databases often have planner hints to select specific plans (for example, DB2's optimization profiles).
 
 \section{Scan Analysis}
 \label{sec:FlashOpti:Scans}
@@ -185,7 +185,6 @@ Indeed, the arguments made by Baumann are a key component of the intuition laid 
 However, the conclusion neglects the observations discussed in Section~\ref{sec:FlashOpti:Scans} demonstrating that queries selecting more than a handful of tuples will likely retrieve the majority of pages in a relation, and thus gain no advantage from fast random IO.
 Tsirogiannis introduces a join algorithm that retrieves only the join columns, joins these values, and then retrieves projected rows via a temporary index.
 By the previous argument, scanning for projected data should retrieve the majority of data pages, preferring a relation scan, and thus provide comparable advantage on disk and SSD.
-I leave a comparative evaluation of their FlashJoin algorithm on SSD and disk to future work.
 
 \section{Conclusion}
 \label{sec:FlashOpti:Conclusion}

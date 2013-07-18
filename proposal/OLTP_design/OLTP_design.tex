@@ -1,11 +1,11 @@
-The following two chapters consider the impact of using emering NVRAM technologies for durable transaction processing.
+The following two chapters consider the impact of using emerging NVRAM technologies for durable transaction processing.
 Refer to Section~\ref{sec:Background:Storage:NVRAM} for an overview of storage technologies and Section~\ref{sec:Background:Recovery} for a description of ARIES, a popular recovery mechanism for disk.
 Work relating to the next two chapters is currently under review at VLDB.
-I completed this work under the advisement of my advisor, Thomas F. Wenisch, and collaborators at Oracle, Brian T. Gold and Bill Bridge.
-I was the sole graduate student and technical contributer (programming and running experiments) for the project, although my co-authors were vital to development the following ideas.
+I completed this work under the guidance of my advisor, Thomas F. Wenisch, and collaborators at Oracle, Brian T. Gold and Bill Bridge.
+I was the sole graduate student and technical contributer (programming and running experiments) for the project, although my co-authors heavily contributed to developing the following ideas.
 I would especially like the thank Brian and Bill for bringing industry's point of view and ``real world" examples to this collaboration.
 
-This chapter outlines the problems with existing disk recovery management, the potential pitfalls of using NVRAM for persistent applications, a methodology for evaluating NVRAM devices that do not yet exist, and a description of several candidate software designs for NVRAM recovery management, to be evaluated later.
+This chapter outlines the problems with existing disk recovery management, the potential pitfalls of using NVRAM for persistent applications, a methodology for evaluating NVRAM devices that are not yet available, and a description of several candidate software designs for NVRAM recovery management, to be evaluated in the next chapter.
 I consider this chapter largely complete with two exceptions.
 First, I have validated my timing model and intend to include results in the final thesis \ref{sec:OLTP_design:Methodology:Proposed}.
 Second, my implementation of \GroupCommit is more complex than a 12 page journal paper allows room to describe.
@@ -170,7 +170,6 @@ Rather, transactions write to a volatile staging buffer, tracking dirtied cache 
 The bit field facilities quickly finding all dirtied data at batch completion.
 Once the batch ends and all transactions complete, the pre-batch version of dirtied data is copied to the database-wide persistent undo log, only after which is data copied from the staging buffer in-place to NVRAM.
 Finally, the database-wide undo log is invalidated, transactions commit, and transactions from the next batch begin executing.
-%Batching allows NVRAM persists to coalesce -- the log persists only the earliest version of data from the batch, while only the last version of data persists in-place, with intermediate values never persisting.
 On failure the log is copied back to the NVRAM database, aborting and rolling back all transactions from the in-flight batch.
 The key observation is that \GroupCommit persists entire batches of transactions using four persist barriers, far fewer than required with \InPlace.  Note, however, that it enables recovery only to batch boundaries, rather than transaction boundaries.
 
