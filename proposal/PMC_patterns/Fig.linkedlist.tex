@@ -1,0 +1,6 @@
+\begin{figure}
+\centering
+\includegraphics[width=.7\textwidth]{PMC_patterns/linkedlist.pdf}
+\caption{\textbf{Persistent linked list.}  The linked list constains nonvolatile Head pointer, volatile Tail pointer, and nodes (data -- solid square; \emph{next} reference -- patterned box).  Nodes persist in parallel (data must still persist before references).  Dashed lines show unnecessary dependencies enforced by strict persistent consistency models, forming a dependence chain.  The valid list is determined at recovery by traversing from Head to the last valid node reference.  Implementing efficient sync remains a challenging.}
+\label{fig:LinkedList}
+\end{figure}
