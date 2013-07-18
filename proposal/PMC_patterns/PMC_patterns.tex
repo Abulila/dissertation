@@ -158,7 +158,7 @@ Unlike the persistent buffer, where log entries persist in parallel and the coun
 For correctness, node data must persist before the node \emph{next} reference pointing to that data.
 
 Strict persistent consistency models will enforce that nodes persist in the order they are inserted.
-Nodes persist in series, each waiting for the previous node to completely persist (references still persisting after the data they point to).
+Nodes persist in series, each waiting for the previous node to completely persist, with references still persisting after the data they point to (necessary dependencies shown as solid arrows, unnecessary dependences as dashed arrows at the bottom of the Figure).
 However, such operation forms a persist dependence chain, limiting persist throughput.
 Instead, we would like to allow persist nodes to persist in parallel, yet continue to enforce node data-before-reference persist orders.
 The valid portion of the list is determined at recovery by traversing the list from the Head, truncating the list at the first null or invalid reference.
