@@ -265,7 +265,7 @@ Aky\"{u}rek and Salem present a hybrid DRAM and NVRAM buffer cache design alongs
 They evaluate their allocation strategies using database traces and queuing models to demonstrate the effectiveness of NVRAM at accelerating persistent writes.
 Partial Memory Buffers is closest to the middle-top cell of the design space table (\InPlace with a software-managed DRAM buffer), although that design considers NVRAM as part of a hybrid buffer, not the primary persistent store.
 None of these works considers alternative approaches (such as \GroupCommit), to account for large persist barrier latency and associated delays.
-Additionally, This work extends prior work by providing a more precise performance evaluation and more detailed consideration of NVRAM characteristics.
+Additionally, this work extends prior work by providing a more precise performance evaluation and more detailed consideration of NVRAM characteristics.
 
 The right column presents \GroupCommit.
 I am not aware of any previous work that extends disk group commit to reduce the frequency of NVRAM persist barriers.
@@ -370,12 +370,12 @@ Experiments perform ``power runs" -- each thread generates and executes transact
 \subsection{Proposed Work}
 \label{sec:OLTP_design:Methodology:Proposed}
 
-While I long ago performed validation of my timing model, I intend to include it in the final thesis.
-The results will include a demonstration that the RDTSCP loop allows precise delays in increments of 20ns.
-Additionally, I will demonstrate the bandwidth can be accurately modeled so long as bandwidth reservations are above 85ns.
+While I long ago performed validation of my timing model, I intend to include a quantatative evaluation in the final thesis.
+Results will include a demonstration that the RDTSCP loop allows precise delays in increments of 20ns.
+Additionally, I will demonstrate the bandwidth can be accurately modeled so long as bandwidth reservations exceed 85ns.
 The original validation was performed on a multi-socket system, using two processors.
-Since then I decided to restrict experiments to a single socket due to WAL performance concerns.
-Bandwidth reservations on a single socket will allow for smaller reservations, so the validation needs to be repeated.
+Recent experiments restrict execution to a single socket due to WAL performance concerns.
+As bandwidth modelling is limited by thread communication latency, I expect single socket execution will allow lower minimum reservations while still accurately modelling bandwidth.
 However, the multi-socket validation provides a conservative bound, supporting the correctness of my experiments.
 
 \section{Related Work}
