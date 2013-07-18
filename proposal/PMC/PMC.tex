@@ -273,7 +273,7 @@ Consider Figure~\ref{fig:BPFS_deadlock}.
 Each thread runs a single epoch with two persists to shared memory.
 The second thread executes these persists in opposite order of the first.
 If thread 1 writes to A at the same time thread 2 writes to B a deadlock occurs.
-Thread 1 next attempts to write to B, fetching the cache line for B, and observes that thread 2 has not yet persisted, so thread 1's epoch must be ordered after thread 2's epoch.
+Thread 1 attempts to write to B, fetching the B's cache line, and observes that thread 2 has not yet persisted, ordering thread 1's epoch after thread 2's.
 Similarly, thread 2 attempts to write to A, ordering its epoch after thread 1's; a cycle has occurred, preventing forward progress.
 
 This problem may occur even without data races or when persists have a total order.
