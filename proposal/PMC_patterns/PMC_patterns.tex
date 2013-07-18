@@ -30,7 +30,7 @@ Other persistent consistency models might enable these optimizations without the
 I qualitatively evaluation my three consistency models with this buffer, reasoning about persist critical path length per buffer insert.
 
 \textbf{PSC.} Under PSC (recall, persistent sequential consistency) all persists to the buffer and counter form a dependence chain, shown at the bottom of Figure~\ref{fig:buffer}.
-Every atomically persistable segment (8 bytes) of buffer data persists in serial, followed by the new value of the counter.
+Every atomically persistable segment (8 bytes) of buffer data persists in series, followed by the new value of the counter.
 The next thread to insert into the buffer reads the counter, a shared variable, ordering all subsequent persists after persists of the previous insert.
 Assuming log entries are 100 bytes on average, each insert requires 14 serial persists (13 to persist the log entry data, 1 to persist the counter).
 If NVRAM persists take even 100ns (a conservative estimate), entries can only be inserted every 1.4\textmu s, on average (any faster and buffers will eventually fill).
