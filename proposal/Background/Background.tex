@@ -201,7 +201,7 @@ For example, implementations are free to \emph{speculate}, executing with relaxe
 When consistency is violated the implementation must rollback and re-execute memory instructions, providing the illusion that threads execute with strict consistency.
 
 \textbf{Sequential Consistency.}
-Sequential Consistency \cite{Laprot79} provides the most intuitive programming model, yet necessarily the worst performance (although modern techniques involving speculation improve performance).
+Sequential Consistency \cite{Lamport79} provides the most intuitive programming model, yet necessarily the worst performance (although modern techniques involving speculation improve performance).
 All loads and stores appear in a globally consistent order that is an interleaving of program order of all threads.
 The programmer need not consider memory instructions reordering; barriers are unnecessary.
 
