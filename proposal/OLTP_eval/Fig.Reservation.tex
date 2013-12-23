@@ -1,0 +1,29 @@
+\begin{table*}
+  \centering
+  \subtable[6 threads]{
+    \label{table::Reservation::6}
+    \begin{tabular}{l l l}
+      \hline
+      socket policy & spread SMT & pack SMT \\
+      \hline \hline
+      spread & 109 & 122 \\
+      pack & 44 & 104 \\
+      \hline
+      \\
+    \end{tabular}
+  }
+  \subtable[12 threads]{
+    \label{table::Reservation::12}
+    \begin{tabular}{l l l}
+      \hline
+      socket policy & spread SMT & pack SMT \\
+      \hline \hline
+      spread & 96 & 101 \\
+      pack & 51 & 51 \\
+      \hline
+      \\
+    \end{tabular}
+  }
+  \caption{\textbf{Bandwidth reservation bendmark.} Benchmark repeatedly reserves bandwidth as time and delays until end of the reservation.  Reservations are inaccurate if entire time cannot be reserved (reservation overhead dominates).  Results shown are reservation sizes (in ns) to reserve 99\% time.  We vary thread placement across CPU sockets and SMT contexts: packed (fill socket/core before allocating new) or spread (round robin assign to resources).  122ns and greater reservations accurately model constrained bandwidth.}
+  \label{table::Reservation}
+\end{table*}
