@@ -203,6 +203,7 @@ Between batches however, all logs and store data persists, placing huge requirem
 I intend to include a quantitative study of this behavior.
 
 \textbf{Device lifetime.}
+\input{OLTP_eval/Fig.WearLeveling.tex}
 NVRAM technologies, much like Flash memory currently, will have limited write endurance; each cell may only be reliably written to a finite number of times.
 Device lifetime is generally determined by the most frequently written addresses.
 Previous work proposes hardware techniques to evenly distribute writes amongst cells by constantly changing the mapping between between memory addresses and the underlying memory cell \cite{QureshiKaridis09}.
@@ -224,6 +225,8 @@ With wear-levelling the primary concern is the total number of persists; all cel
 While \GroupCommit outperforms \NVDisk and \InPlace in this regard, none of the recovery mechanisms pose a device lifetime concern.
 Simply put, an insufficient amount of data persists to worry about device lifetime in the presence of hardware wear-levelling.
 I will include a quantitative evaluation of device lifetime by measuring the rate that persists occur to individual addresses.
+
+\input{OLTP_eval/Fig.Delay.tex}
 
 \section{Conclusion}
 \label{sec:OLTP_eval:Conclusion}
