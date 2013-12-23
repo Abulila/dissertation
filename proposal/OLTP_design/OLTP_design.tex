@@ -199,6 +199,7 @@ Whereas I expect NVRAM to have sufficient bandwidth to persist data quickly, orc
 The details of this implementation were omitted from the VLDB submission, but are included here, including work to be done.
 
 \textbf{Concurrent Dirty Set.}
+\input{OLTP_design/Fig.bitset.tex}
 As described previously, \GroupCommit requires each batch to track dirty data.
 This is done with an efficient concurrent set, tracking the set of buffer pool cache lines dirtied by each batch.
 In order to maximize transaction throughput, this set must allow low overhead updates by concurrent threads during batch execution, and fast iteration during batch persist.
