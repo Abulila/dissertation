@@ -136,6 +136,8 @@ TPCB and TPCC see the two mechanisms intersect near 3.5\textmu s and 2.5\textmu 
 TATP, unlike the other two workloads, only updates a single page per transaction.
 Other overheads tend to dominate transaction time, resulting in a relatively shallow \InPlace curve.
 
+\input{OLTP_eval/Fig.PersistLatencyBreakeven.tex}
+
 These results suggest different conclusions across storage architectures.
 NVRAM connected via the main memory bus will provide low latency persist barriers (less than 1\textmu s) and prefer \InPlace.
 Other storage architectures, such as distributed storage, require greater delays to synchronize persists.
