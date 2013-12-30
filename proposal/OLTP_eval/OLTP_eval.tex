@@ -316,67 +316,142 @@ Further, high-percentile transaction latencies fall well below the latency expec
 TPCC, the highest latency workload, approaches optimal throughput with a 95th percentile transaction latency of 15ms---similar to latencies incurred by disk-backed databases.
 For latency sensitive workloads, the batch period can be selected to precisely control latency, and \InPlace and \NVDisk remain alternatives.
 
+\subsection{NVRAM Persist Limitations}
+\label{sec:OLTP_eval:Persists:Limitations}
+
+In addition to persist delays NVRAM may suffer limitations due to persist bandwidth and write endurance.
+I quantify these limitations and determine how database design affects each.
+
+\textbf{Persist bandwidth.}
+Different NVRAM storage architectures impose a variety of limitations on persist bandwidth (e.g., memory bus-attached NVRAM will allow greater throughput than PCIe-attached NVRAM).
+Different software designs place varying requirements on bandwidth.
+
+\input{OLTP_eval/Fig.Bandwidth.tex}
+Figure~\ref{fig::Bandwidth} shows the bandwidth required for each workload and recovery mechanism to achieve 95\% throughput compared to same configuration with no bandwidth constraint.
+Each recovery mechanism sees different bandwidth requirements, and required bandwidth varies across workloads.
+
+The \NVDisk configuration flushes pages aggressively (attempts to flush continuously) and consumes all available bandwidth.
+Since bandwidth is restricted recovery latency may increase (not reflected in the results).
+Page flushing contends with log flushing for bandwidth, but so long as log flushes are minimally delayed throughput will not be affected.
+TATP, which contains short transactions, requires the most bandwidth (1.7GB/s) to reduce transaction commit delays.
+I believe that disk group commit (rather than synchronous commit) would alleviate this bandwidth requirement.
+TPCC, on the other hand, has long transactions and transaction commit is less of a concern.
+
+\InPlace requires the least bandwidth of the recovery mechanisms.
+TATP's Update Location transaction needs the least bandwidth (0.4GB/s) since each transaction contains only a single small update.
+TPCC's New Order transaction modifies much more data, requiring 0.8GB/s persist bandwidth to achieve 95\% throughput.
+
+Finally, \GroupCommit sees varying requirements on persist bandwidth.
+All persists occur at batch boundaries, resulting in quick persist bursts.
+I consider two batch periods---20ms and 200ms.
+TATP and TPCC require relatively small bandwidths while TPCC requires over 1.5GB/s persist bandwidth to achieve 95\% throughput.
+The bursty nature of \GroupCommit and large modifications by TPCC's New Order transaction result in persist bandwidth quickly creating a bottleneck.
+Longer batches help slightly by allowing updates to coalesce within the batch (and thus reducing the total number of bytes persisted).
+The bandwidth requirements would be reduced by introducing mechanisms to enable early persists (persist data before the batch ends).
+
+While persist bandwidth requirements vary, the strictest configuration (\NVDisk for TATP) requires only 1.7GB/s.
+Such bandwidth is currently possible with existing PCIe flash memory SSDs, and I believe is attainable for all candidate NVRAM technologies.
+Thus, I conclude that persist bandwidth will not be a concern for OLTP systems using NVRAM.
+
+\textbf{Device lifetime.}
+NVRAM technologies, much like Flash memory currently, will have limited write endurance; each cell may only be reliably written to a finite number of times.
+Device lifetime is generally determined by the most frequently written addresses.
+Previous work proposes hardware techniques to evenly distribute writes amongst cells by constantly changing the mapping between between memory addresses and the underlying memory cell \cite{QureshiKaridis09}.
+These techniques prolong device lifetime by ensuring that frequently written addresses do not wear out individual cells.
+While the recovery mechanisms presented here each produce varying persist rates with different abilities to naturally distribute persists across addresses, it is unclear if software mechanisms are sufficient to prolong device lifetime.
+
+\input{OLTP_eval/Fig.WearLeveling.tex}
+Figure~\ref{fig::WearLeveling} shows the required cell endurance (number of persists) to achieve a 10-year device lifetime assuming the database runs at maximum throughput continuously.
+Persists are tracked at byte granularity.
+I consider two scenarios: no wear leveling---lifetime is limited by the most frequently written address, and perfect wear leveling---all persists are evenly distributed across all physical addresses (provided in hardware).
+I consider \NVDisk with instantaneous recovery and 3s recovery latency, \InPlace, and \GroupCommit with 20ms and 200ms batch latencies.
+All recovery mechanisms assume \InPlace's throughput for a more fair comparison.
+
+Logs are implemented as circular buffers.
+Thus, logs do not contribute to the most written byte and have no bearing on device lifetime without hardware wear leveling.
+With perfect wear leveling a 32GB device is assumed.
+
+Without hardware wear leveling \NVDisk with instantaneous recovery (aggressive page flushing) and \InPlace require the greatest cell endurance.
+Both mechanisms persist each update directly to the NVRAM store.
+\NVDisk must additionally persist LSNs, which are the most persisted data, while LSNs are no longer used with \InPlace and \GroupCommit.
+Both of these configurations require greater cell endurance than what phase change memory is expected to achieve \fixme{cite and say what we are using ($10^9$?)}.
+
+\NVDisk with 3s recovery latency requires much lower cell endurance for a 10 year lifetime.
+Writes to heap pages coalesce and only occasionally persist to NVRAM.
+\NVDisk effectively increases device lifetime by reducing the total number of persists and limiting the rate that any single page may write back.
+However, doing so requires an increase in recovery latency.
+\NVDisk may possibly provide acceptable software wear leveling so long as recovery latency is reasonable.
+
+Finally, \GroupCommit provides wear leveling by only allowing a single persist to each address per batch (all other persists coalesce).
+However, 20ms batches are unable to coalesce enough writes to guarantee a 10 year device lifetime.
+Using \GroupCommit to wear-level requires batch period, and therefore transaction latency, increase.
+
+When hardware distributes persists evenly across NVRAM cells all recovery mechanisms achieve a 10 year lifetime.
+In this case lifetime is determined by the total number of persists rather than the most-persisted address.
+Due to the inability of software to reliably and sufficiently extend device lifetime, I expect future NVRAM SSDs to include hardware wear leveling.
+
 \subsection{Summary}
 \label{sec:OLTP_eval:Persists:Summary}
 Persist barriers used to enforce persist order pose a new obstacle to providing recoverable storage management with NVRAM.
 I show that, for memory bus-attached NVRAM devices, ensuring recovery using \InPlace is a viable strategy that provides high throughput and removes the overheads of WAL.
 For interconnects and NVRAM technologies that incur larger persist barrier delays, \GroupCommit offers an alternative that yields high throughput and reasonable transaction latency.
 \GroupCommit's batch period allows precise control over transaction latency for latency-critical applications.
+Finally, I demonstrate that persist bandwidth is not a concern and that while \NVDisk may provide an effective mechanism to cope with limited write endurance I expect future devices to include hardware wear leveling.
 
-\section{Proposed Work}
-\label{sec:OLTP_eval:Proposed}
-
-I propose to include two additional studies.
-These studies were originally conducted for an earlier journal submission; the experimental system has changed substantially since then.
-
-\textbf{Persist bandwidth.}
-\input{OLTP_eval/Fig.Bandwidth.tex}
-Different NVRAM storage architectures impose a variety of limitations on persist bandwidth (e.g., memory bus-attached NVRAM will allow greater throughput than PCIe-attached NVRAM).
-I intend to study the persist bandwidth requirements for each recovery mechanism.
-
-Recovery mechanisms display interesting behaviors with respect to bandwidth.
-\NVDisk persists inefficiently with respect to the total number of bytes updated; even a small page update requires large log entries.
-However, the log persist makes effective use of cache lines (the granularity that data must transfer to the memory device).
-Further, when increased recovery latency is allowable, bandwidth usage may be decreased by deferring page flushing, allowing writes to coalesce in pages.
-The result is that \NVDisk makes reasonable use of bandwidth, and bandwidth constraints are unlikely to limit throughput.
-
-\InPlace displays similar bandwidth usage to \NVDisk.
-All page updates must persist to NVRAM, and these updates tend to use cache lines ineffectively (only a small portion of each cache line changes).
-Also similarly to \NVDisk, \InPlace must maintain ARIES logs (although per-transaction and undo-only), requiring large persists.
-
-\GroupCommit, while persisting the least amount of data, is the most sensitive to persist bandwidth constraints.
-The total quantity of data is reduced by using physical logs -- logs copy data with little associated metadata.
-Additionally, updates in each batch coalesce.
-Only the first write to a given address produces undo, and only the final write to that address persists in-place.
-Other versions of data during the batch do not persist.
-The downside of \GroupCommit is that persists occur in bursts between batches.
-No data persists while the batch executes.
-Between batches however, all logs and heap data persists, placing huge requirements on bandwidth.
-I intend to include a quantitative study of this behavior.
-
-\textbf{Device lifetime.}
-\input{OLTP_eval/Fig.WearLeveling.tex}
-NVRAM technologies, much like Flash memory currently, will have limited write endurance; each cell may only be reliably written to a finite number of times.
-Device lifetime is generally determined by the most frequently written addresses.
-Previous work proposes hardware techniques to evenly distribute writes amongst cells by constantly changing the mapping between between memory addresses and the underlying memory cell \cite{QureshiKaridis09}.
-These techniques prolong device lifetime by ensuring that frequently written addresses do not wear out individual cells.
-While the recovery mechanisms presented here each produce varying persist rates with different abilities to naturally distribute persists across addresses, it is unclear if software mechanisms are sufficient to prolong device lifetime.
-I intend to study expected device lifetime for each recovery mechanism, both assuming that persists to an address always persist to the same cell, and assuming hardware that evenly distributes persists across cells.
-
-When wear-levelling hardware is unavailable \NVDisk manages to prolong lifetime the best of the three recovery mechanisms.
-Centralized logs evenly persist to the entire log address space.
-Writes to individual pages may be bounded by limiting the page flush rate, although at the cost of recovery latency.
-\InPlace provides the shortest device lifetime.
-Updates to hot pages and addresses persist each distinct value, quickly wearing out hot cells.
-\GroupCommit limits writes to hot address, but is insufficient to provide lifetime guarantees for expected phase-change write endurance.
-Persists coalesce within each batch, bounding persists to a single write per cell per batch.
-However, batches are sufficiently short that hot addresses still experience a high write-rate, wearing out quickly.
-
-The story changes when hardware spreads persists across NVRAM cells.
-With wear-levelling the primary concern is the total number of persists; all cells experience the same number of persists.
-While \GroupCommit outperforms \NVDisk and \InPlace in this regard, none of the recovery mechanisms pose a device lifetime concern.
-Simply put, an insufficient amount of data persists to worry about device lifetime in the presence of hardware wear-levelling.
-I will include a quantitative evaluation of device lifetime by measuring the rate that persists occur to individual addresses.
+%\section{Proposed Work}
+%\label{sec:OLTP_eval:Proposed}
+%
+%I propose to include two additional studies.
+%These studies were originally conducted for an earlier journal submission; the experimental system has changed substantially since then.
+%
+%\textbf{Persist bandwidth.}
+%\input{OLTP_eval/Fig.Bandwidth.tex}
+%Different NVRAM storage architectures impose a variety of limitations on persist bandwidth (e.g., memory bus-attached NVRAM will allow greater throughput than PCIe-attached NVRAM).
+%I intend to study the persist bandwidth requirements for each recovery mechanism.
+%
+%Recovery mechanisms display interesting behaviors with respect to bandwidth.
+%\NVDisk persists inefficiently with respect to the total number of bytes updated; even a small page update requires large log entries.
+%However, the log persist makes effective use of cache lines (the granularity that data must transfer to the memory device).
+%Further, when increased recovery latency is allowable, bandwidth usage may be decreased by deferring page flushing, allowing writes to coalesce in pages.
+%The result is that \NVDisk makes reasonable use of bandwidth, and bandwidth constraints are unlikely to limit throughput.
+%
+%\InPlace displays similar bandwidth usage to \NVDisk.
+%All page updates must persist to NVRAM, and these updates tend to use cache lines ineffectively (only a small portion of each cache line changes).
+%Also similarly to \NVDisk, \InPlace must maintain ARIES logs (although per-transaction and undo-only), requiring large persists.
+%
+%\GroupCommit, while persisting the least amount of data, is the most sensitive to persist bandwidth constraints.
+%The total quantity of data is reduced by using physical logs -- logs copy data with little associated metadata.
+%Additionally, updates in each batch coalesce.
+%Only the first write to a given address produces undo, and only the final write to that address persists in-place.
+%Other versions of data during the batch do not persist.
+%The downside of \GroupCommit is that persists occur in bursts between batches.
+%No data persists while the batch executes.
+%Between batches however, all logs and heap data persists, placing huge requirements on bandwidth.
+%I intend to include a quantitative study of this behavior.
+%
+%\textbf{Device lifetime.}
+%\input{OLTP_eval/Fig.WearLeveling.tex}
+%NVRAM technologies, much like Flash memory currently, will have limited write endurance; each cell may only be reliably written to a finite number of times.
+%Device lifetime is generally determined by the most frequently written addresses.
+%Previous work proposes hardware techniques to evenly distribute writes amongst cells by constantly changing the mapping between between memory addresses and the underlying memory cell \cite{QureshiKaridis09}.
+%These techniques prolong device lifetime by ensuring that frequently written addresses do not wear out individual cells.
+%While the recovery mechanisms presented here each produce varying persist rates with different abilities to naturally distribute persists across addresses, it is unclear if software mechanisms are sufficient to prolong device lifetime.
+%I intend to study expected device lifetime for each recovery mechanism, both assuming that persists to an address always persist to the same cell, and assuming hardware that evenly distributes persists across cells.
+%
+%When wear-levelling hardware is unavailable \NVDisk manages to prolong lifetime the best of the three recovery mechanisms.
+%Centralized logs evenly persist to the entire log address space.
+%Writes to individual pages may be bounded by limiting the page flush rate, although at the cost of recovery latency.
+%\InPlace provides the shortest device lifetime.
+%Updates to hot pages and addresses persist each distinct value, quickly wearing out hot cells.
+%\GroupCommit limits writes to hot address, but is insufficient to provide lifetime guarantees for expected phase-change write endurance.
+%Persists coalesce within each batch, bounding persists to a single write per cell per batch.
+%However, batches are sufficiently short that hot addresses still experience a high write-rate, wearing out quickly.
+%
+%The story changes when hardware spreads persists across NVRAM cells.
+%With wear-levelling the primary concern is the total number of persists; all cells experience the same number of persists.
+%While \GroupCommit outperforms \NVDisk and \InPlace in this regard, none of the recovery mechanisms pose a device lifetime concern.
+%Simply put, an insufficient amount of data persists to worry about device lifetime in the presence of hardware wear-levelling.
+%I will include a quantitative evaluation of device lifetime by measuring the rate that persists occur to individual addresses.
 
 \section{Conclusion}
 \label{sec:OLTP_eval:Conclusion}
