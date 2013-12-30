@@ -159,7 +159,7 @@ As persist barrier latency increases performance suffers, and \NVDisk eventually
 Here, I present \GroupCommit, coupling \NVDisk's persist barrier latency-insensitivity with \InPlace's low software overhead.
 
 \subsection{Operating Principles and Implementation}
-\label{sec:OLTP_design:GroupCommit:Proposed}
+\label{sec:OLTP_design:GroupCommit:Operation}
 
 \GroupCommit operates by executing transactions in batches, whereby all transactions in the batch commit or (on failure) all transactions abort.
 Transactions quiesce between batches---at the start of a new batch transactions stall until the previous batch commits.
@@ -277,17 +277,6 @@ The right column presents \GroupCommit.
 Each of the three recovery mechanisms may replicate all data between NVRAM and DRAM to ensure fast read accesses, manage a smaller DRAM buffer cache, or omit the cache altogether.
 In Section~\ref{sec:OLTP_eval:Reads} I consider the importance of NVRAM caching to transaction throughput.
 Then, in Section~\ref{sec:OLTP_eval:Persists} I assume a DRAM-replicated heap to isolate read performance from persist performance in evaluating each recovery mechanisms's ability to maximize transaction throughput.
-
-\subsection{Proposed Work}
-\label{sec:OLTP_design:Methodology:Proposed}
-
-While I long ago performed validation of my timing model, I intend to include a quantatative evaluation in the final thesis.
-Results will include a demonstration that the RDTSCP loop allows precise delays in increments of 20ns.
-Additionally, I will demonstrate the bandwidth can be accurately modeled so long as bandwidth reservations exceed 85ns.
-The original validation was performed on a multi-socket system, using two processors.
-Recent experiments restrict execution to a single socket due to WAL performance concerns.
-As bandwidth modelling is limited by thread communication latency, I expect single socket execution will allow lower minimum reservations while still accurately modelling bandwidth.
-However, the multi-socket validation provides a conservative bound, supporting the correctness of my experiments.
 
 \section{Related Work}
 \label{sec:OLTP_design:RelatedWork}
