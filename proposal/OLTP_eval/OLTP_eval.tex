@@ -2,6 +2,144 @@ This chapter builds on the previous to investigate the performance effects of di
 I look at NVRAM read and write performance concerns separately.
 Additionally, I propose to include additional investigations into important aspects of the system such as bandwidth constraints and device lifetime (based on write endurance), outlined in Section~\ref{sec:OLTP_eval:Proposed}.
 
+\section{Methodology}
+\label{sec:OLTP_design:Methodology}
+
+This section details the methodology for benchmarking transaction processing and modeling NVRAM performance.
+Experiments use the Shore-MT storage manager \cite{JohnsonPandis09}, including the high performance, scalable WAL implementation provided by Aether \cite{JohnsonPandis10}.
+While Aether provides a distributed log suitable for multi-socket servers, the distributed log exists as a fork of the main Shore-MT project.
+Instead, I limit experiments to a single CPU socket to provide a fair comparison between WAL and other recovery schemes, enforced using the Linux \emph{taskset} utility.
+Experiments place both the Shore-MT log and volume files on an in-memory \emph{tmpfs}, and provide sufficiently large buffer caches such that all pages hit in the cache after warmup.
+The intent is to allow the database to perform data accesses at DRAM speed and introduce additional delays to model NVRAM performance.
+Table~\ref{table::Specs} shows the experimental system configuration.
+
+\begin{table}
+  \centering
+  \begin{tabular}{l l}
+    \hline
+    Operating System & Ubuntu 12.04 \\
+    CPU & Intel Xeon E5645 \\
+    & 2.40 GHz \\
+    CPU cores & 6 (12 with HyperThreading) \\
+    Memory & 32 GB \\
+    \hline
+  \end{tabular}
+  \caption{\textbf{Experimental system configuration.}}
+  \label{table::Specs}
+\end{table}
+
+\textbf{Modeling NVRAM delays.}
+Since NVRAM devices are not yet available, I must provide a timing model that mimics their expected performance characteristics.
+I model NVRAM read and write delays by instrumenting Shore-MT with precisely controlled assembly-code delay loops to model additional NVRAM latency and bandwidth constraints at 13ns precision.
+Hence, Shore-MT runs in real time as if its buffer cache resided in NVRAM with the desired read and write characteristics.
+
+I create NVRAM delays using the x86 RDTSCP instruction, which returns a CPU-frequency-invariant, monotonically increasing time-stamp that increments each clock tick.
+RDTSCP is a synchronous instruction---it does not allow other instructions to reorder with it.
+The RDTSCP loop delays threads in increments of 13ns (latency per loop iteration and RDTSCP) with an accuracy of 2ns.
+
+\input{OLTP_eval/Fig.Delay.tex}
+Figure~\ref{fig::Delay} shows the measured delay that results from iterating on an intended delay (both in ns).
+Each point shows the median of ten thousand delay trials (a small number of trials result in excessively large delays likely due to context switches and skew the mean).
+The delay function resembles a step function---delays may only be inserted in multiples of the loop iteration latency.
+
+To better understand delay behavior I perform a least squares regression of a step function against the measured data of the form:
+$$delay(intended) = a \times floor(intended / a + b) + c$$
+which results in an $R^2$ of .997 and the following parameter values: $a = 12.5$, $b=.434$, and $c=10.1$.
+This indicates that each iteration takes 12.5ns.
+
+As delays can only be introduced in steps I subtract 9.3ns from the intended delay which matches the intended delay to the closest step.
+The resulting delay is within 6.25ns of the intended delay.
+However, a given delay contains a constant skew (for example, an intended delay of 30ns always results in a 35ns delay).
+As NVRAM persist latencies are expected to be in the hundreds of ns or greater, such error will negligibly affect my results.
+
+
+\textbf{Modeling NVRAM persist bandwidth.}
+In addition to NVRAM latency, I model shared NVRAM write bandwidth.
+Using RDTSCP as a clock source, I maintain a shared \emph{next\_available} variable, representing the next clock tick in which the NVRAM device is available to be written.
+Each NVRAM persist advances \emph{next\_available} to account for the latency of its persist operation.
+Reservations take the maximum of \emph{next\_available} and the current RDTSCP and add the reservation duration.
+The new value is atomically swapped into \emph{next\_available} via a Compare-And-Swap (CAS).
+If the CAS fails (due to a race with a persist operation on another thread), the process repeats until it succeeds.
+Upon success, the thread delays until the end of its reservation.
+The main limitation of this approach is that it cannot model reservations shorter than the delay required to perform a CAS to a contended shared variable.
+This technique models reservations above 120ns accurately, which is sufficient for my experiments.
+
+\input{OLTP_eval/Fig.Reservation.tex}
+
+Several factors affect the speed of bandwidth reservations (and therefore reservation accuracy) including the number of threads and their placement across sockets and cores.
+I tests the reservation system's accuracy by constraining thread placement while threads repeatedly reserve time and delay until the end of the reservation.
+When all available time is reserved reservation overhead is negligible and the modelled bandwidth is accurate.
+However, when reservation length is sufficiently short reservation overheads will dominate, resulting in unreserved time.
+
+Table~\label{table::Reservation} shows the required reservation length (in ns) to reserve 99\% of time with six and 12 threads.
+Additionally, the Table shows different thread placement across sockets and cores.
+``Spread" implies assigning threads round-robin to all available resources, while ``pack" indicates that each resource is filled before assigning any threads to the next.
+For example, assigning six threads in a pack sockets--spread cores policy (on a two socket server, each with six cores and two-way SMT) results in all six threads scheduled on the same socket but each thread on its own core (thus SMT is unused).
+Such a configuration requires reservations of only 44ns to reserve 99\% of bandwidth-time.
+
+Spreading threads across sockets or packing within cores slows reservations by requiring long-latency communication between sockets or forcing threads to contend with each other while scheduling instructions on cores.
+At worst, when threads are spread across sockets and packed within cores a reservation length of 122ns is required to reserve 99\% of time.
+
+A similar trend is true when considering 12 threads.
+Packing threads into a socket completely fills all cores and SMT contexts of the socket (the bottom two cells represent the same configuration), needing 51ns reservations for accurate bandwidth modeling.
+Spreading threads across sockets while packing cores requires 101ns to reserve 99\% of time.
+The required time decreases from six to 12 threads as more threads are available to reserve time and it is less likely that time will go unreserved.
+
+These results suggest that bandwidth reservations will be accurate so long as each reservation exceeds 120ns.
+In Shore-MT I reserve bandwidth for each cache line persisted.
+The persist bandwidth analysis study (presented later in Section~\fixme{number}) shows that 35ns per cache line (approximately 1.7GB/s persists) represents sufficient bandwidth to negligibly limit performance.
+Since at least four cache lines are always reserved together (in \texttt{persist\_page} and \texttt{persist\_wal}) the bandwidth reservation is accurate.
+
+\textbf{NVRAM performance.}
+
+I introduce NVRAM read and write delays separately.
+Accurately modeling per-access increases in read latency is challenging, as reads are frequent and the expected latency increases on NVRAM are small.
+It is infeasible to use software instrumentation to model such latency increases at the granularity of individual reads; hardware support, substantial time dilation, or alternative evaluation techniques (e.g., simulation) would be required, all of which compromise accuracy and the ability to run experiments at full scale.
+Instead, I use offline analysis with PIN \cite{LukCohn05} to determine (1) the reuse statistics of buffer cache pages, and (2) the average number of cache lines accessed each time a page is latched.
+Together, these offline statistics provide an average number of cache line accesses per page latch event in Shore-MT while considering the effects of page caching.
+I then introduce a delay at each latch based on the measured average number of misses and an assumed per-read latency increase based on the NVRAM technology.
+
+I model NVRAM persist delays by annotating Shore-MT to track buffer cache writes at cache line granularity---64 bytes---using efficient ``dirty" bitmaps.
+Depending on the recovery mechanism, I introduce delays corresponding to persist barriers and to model NVRAM write bandwidth contention.
+Tracking buffer cache writes introduces less than a 3\% overhead to the highest throughput experiments.
+
+I choose on-line timing modeling via software instrumentation in lieu of architectural simulations to allow experiments to execute at full scale and in real time.
+While modeling aspects of NVRAM systems such as cache performance and more precise persist barrier delays require detailed hardware simulation, I believe NVRAM device and memory system design are not sufficiently established to consider this level of detail.
+Instead, I investigate more general trends to determine if and when NVRAM read and write performance warrant storage management redesign.
+
+\textbf{Recovery performance.} Figure~\ref{fig::Recovery} displays recovery latency vs transaction throughput for the TPCB workload, varying page flush rate.
+Page flush rate is controlled by maintaining a constant number of dirty pages in the buffer cache, always flushing the page with the oldest volatile update.
+Experiments run TPCB for one minute (sufficient to reach steady state behavior) and then kill the Shore-MT process.
+Before starting recovery I drop the file system cache.
+Reported recovery time includes only the recovery portion of the Shore-MT process; I do not include system startup time nor non-recovery Shore-MT startup time.
+
+\textbf{Workloads}
+I use three workloads and transactions in this evaluation: TPCC, TPCB, and TATP.
+TPCC models order management for a company providing a product or service \cite{TPCC}.
+TPCB contains one transaction class and models a bank executing transactions across branches, tellers, customers, and accounts \cite{TPCB}.
+TATP includes seven transactions to model a Home Location Registry used by mobile carriers \cite{TATP}.
+Table~\ref{table::Workloads} shows the workload configuration.
+%I choose a single updating transaction from each workload and size workloads to fit in a 12GB buffer cache.
+I scale workloads to fit in a 12GB buffer cache.
+Persist performance experiments use a single write-heavy transaction from each workload while read performance experiments use each workload's full mix.
+All experiments report throughput as thousands of Transactions Per Second (kTPS).
+Experiments perform ``power runs" -- each thread generates and executes transactions continuously without think time -- and run an optimal number of threads per configuration (between 10 and 12).
+
+\begin{table}
+  \centering
+  \begin{tabular}{l l l l}
+    \hline
+    Workload & Scale factor & Size & Write transaction \\
+    \hline \hline
+    TPCC & 70 & 9GB & New order \\
+    TPCB & 1000 & 11GB & \\
+    TATP & 600 & 10GB & Update location \\
+    \hline
+  \end{tabular}
+  \caption{\textbf{Workloads and transactions.}  One transaction class from each of three workloads, sized to approximately 10GB.}
+  \label{table::Workloads}
+\end{table}
+
 \section{NVRAM Reads}
 \label{sec:OLTP_eval:Reads}
 
@@ -239,9 +377,6 @@ With wear-levelling the primary concern is the total number of persists; all cel
 While \GroupCommit outperforms \NVDisk and \InPlace in this regard, none of the recovery mechanisms pose a device lifetime concern.
 Simply put, an insufficient amount of data persists to worry about device lifetime in the presence of hardware wear-levelling.
 I will include a quantitative evaluation of device lifetime by measuring the rate that persists occur to individual addresses.
-
-\input{OLTP_eval/Fig.Delay.tex}
-\input{OLTP_eval/Fig.Reservation.tex}
 
 \section{Conclusion}
 \label{sec:OLTP_eval:Conclusion}
