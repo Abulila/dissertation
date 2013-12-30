@@ -21,9 +21,9 @@ In addition, I record all latch events (acquire and release) and latch page info
 I analyze traces at cache line (64 bytes) and page (8KB) granularity.
 
 These traces provide insight into how Shore-MT accesses persistent data, summarized in Table~\ref{table::AccessCharacteristics}.
-Index accesses represent the great majority of cache line accesses, averaging 84\% of accesses to NVRAM across workloads.
+Index accesses represent the great majority of cache line accesses, averaging 85\% of accesses to NVRAM across workloads.
 Any caching efforts should focus primarily on index pages and cache lines.
-Note also that indexes access a greater number of cache lines per page access than other page types (average 11.54 vs 5.20 per heap and 3.39 per other page types), suggesting that uncached index page accesses have the potential to introduce greater delays. 
+Note also that indexes access a greater number of cache lines per page access than other page types (average 11.48 vs 4.85 for heap pages and 4.77 for other page types), suggesting that uncached index page accesses have the potential to introduce greater delays.
 
 \textbf{Throughput.}
 \input{OLTP_eval/Fig.ReadPerformance.tex}
@@ -40,8 +40,7 @@ The vertical axis displays throughput normalized to DRAM-miss-latency's throughp
 Without caching, throughput suffers as NVRAM miss latency increases, shown at the extreme left of each graph.
 A 100ns miss latency consistently achieves at least 90\% of potential throughput.
 However, an 800ns miss latency averages only 50\% of the potential throughput, clearly requiring caching.
-Fortunately, caching proves remarkably effective for all workloads.
-Each workload sees a spike of 10-20\% improvement for a cache size of just 20 pages.
+TPCB and TPCC see a 10-20\% throughput improvement for a cache size of just 20 pages.
 As cache capacity further increases, each workload's throughput improves to varying degrees.
 A cache capacity of 100,000 (or 819MB at 8KB pages) allows NVRAMs with 800ns miss latencies to achieve at least 80\% of the potential throughput.
 While too large for on-chip caches, such a buffer might be possible as a hardware-managed DRAM cache \cite{QureshiSrinivasan09}.
@@ -51,11 +50,11 @@ While too large for on-chip caches, such a buffer might be possible as a hardwar
 \input{OLTP_eval/Fig.Caching.tex}
 I have shown that modest cache sizes effectively hide NVRAM read stalls for these workloads, and further analyze caching behavior to reason about OLTP performance more generally.
 Figure~\ref{fig::Caching} shows the page miss rate per page type (index, heap, or other) as page cache capacity increases.
-Each graph begins at 1.0 at the left -- all page accesses miss for a single page cache.
+Each graph begins at 1.0 at the left---all page accesses miss for a single-page cache.
 As cache capacity increases, workloads see their miss rates start to decrease between cache capacity of five and 20 pages.
-TATP experiences a decrease in misses only in index pages, whereas TPCB and TPCC see a decrease across all page types.
+TATP experiences a decrease in misses primarily in index pages, whereas TPCB and TPCC see a decrease across all page types.
 
-While the behavior is specific to each workload, the results represent trends applicable to most databases and workloads, specifically, index accesses and append-heavy tables.
+While cache behavior is specific to each workload, the results represent trends applicable to many databases and workloads, specifically, index accesses and append-heavy tables.
 First, all workloads see a decrease in index page misses as soon as B+Tree roots (accessed on every traversal) successfully cache.
 The hierarchical nature of B+Tree indexes allows high levels of the tree to cache effectively for even a small cache capacity.
 Additionally, TPCB and TPCC contain history tables to which data are primarily appended.
@@ -64,6 +63,13 @@ Similarly, extent map pages used for allocating new pages and locating pages to 
 The remaining tables' pages are accessed randomly and only cache as capacity approaches the size of each table.
 In the case of TPCB and TPCC, each transaction touches a random tuple of successively larger tables (Branch, Teller, and Account for TPCB; Warehouse, District, Customer, etc. for TPCC).
 This analysis suggests that various page types, notably index and append-heavy pages, cache effectively, accelerating throughput for high-latency NVRAM misses with small cache capacities.
+
+\textbf{Main-memory databases.}
+While I use Shore-MT (a disk-based storage manager) as a research platform, main-memory database optimizations (e.g., \cite{DiaconuFreedman13, BallardBehman11, Oracle09}) also apply to byte-addressable NVRAM.
+Main-memory databas\-es assume heap data resides solely in byte-addressable memory, improving throughput relative to traditional disk-back\-ed storage by removing expensive indirection (i.e., using memory pointers instead of buffer translation tables), reducing overheads associated with concurrency control and latches, and optimizing data layout for caches and main-memory, among other optimizations.
+While such optimizations will increase transaction throughput, removing non-NVRAM overheads will amplify the importance of read-miss latency (an equal increase in NVRAM read-miss latency will yield a relatively greater drop in performance).
+At the same time, data layout optimizations will reduce the number of cache lines and memory rows accessed per action (e.g., per latch), minimizing NVRAM read overheads.
+Investigating main-memory database optimizations for NVRAM remains future work.
 
 \begin{table}
   \centering
@@ -76,7 +82,7 @@ This analysis suggests that various page types, notably index and append-heavy p
     TPCC & 1.168 \\
     \hline
   \end{tabular}
-  \caption{\textbf{Maximum required NVRAM read bandwidth.} Workloads require approximately 1 GB/s NVRAM read bandwith, well below technology limits.}
+  \caption{\textbf{Required NVRAM read bandwidth.} Workloads require up to 1.2 GB/s read bandwith.}
   \label{table::ReadBandwidth}
 \end{table}
 
@@ -85,13 +91,13 @@ Finally, I briefly address NVRAM read bandwidth.
 For a worst-case analysis, I assume no caching.
 Given the average number of cache line accesses per page latch, the average number of page latches per transaction, and transaction throughput (taken from Section~\ref{sec:OLTP_eval:Persists}), I compute worst-case NVRAM read bandwidth for each workload, shown in Table~\ref{table::ReadBandwidth}~
 The considered workloads require at most 1.168 GB/s (TPCC).
-Since this is substantially lower than expected NVRAM bandwidth and caching reduces the required bandwidth further, I conclude that NVRAM read bandwidth for persistent data on OLTP is not a concern.
+Since this is lower than expected NVRAM bandwidth and caching reduces the required bandwidth further, I conclude that NVRAM read bandwidth for persistent data on OLTP is not a concern.
 
 \subsection{Summary}
 \label{sec:OLTP_eval:Reads:Summary}
 NVRAM presents a new storage technology for which modern database systems have not been optimized.
 Increased memory read latencies require new consideration for database caching systems.
-I show that persistently stored data for OLTP can be cached effectively, even with limited cache capacity.
+I show that persistent data for OLTP can be cached effectively, even with limited cache capacity.
 I expect future NVRAM software to leverage hardware caches, omitting software buffer caches.
 Next, I turn to write performance for storage management on NVRAM devices.
 
@@ -104,8 +110,8 @@ Several factors increase persist barrier latency, including ordering persists ac
 I consider the effect of persist barrier latency on transaction processing throughput to determine if and when new NVRAM technologies warrant redesigning recovery management.
 
 Refer to Sections~\ref{sec:OLTP_design:Design} and~\ref{sec:OLTP_design:Methodology} for a more thorough description of recovery mechanisms and experimental setup.
-All experiments throttle persist bandwidth to 1.5GB/s, which I believe to be conservative (possible with PCIe-attached Flash).
-Ideally, NVRAM will provide fast enough accesses to use \InPlace.
+All experiments throttle persist bandwidth to 1.5GB/s, which I believe to be conservative (already possible with PCIe-attached Flash).
+Ideally, NVRAM will provide low latency access, enabling \InPlace.
 However, one would expect \InPlace's performance to suffer at large persist barrier latencies, requiring either \NVDisk or \GroupCommit to regain throughput.
 
 \subsection{Persist Barrier Latency}
@@ -113,7 +119,7 @@ However, one would expect \InPlace's performance to suffer at large persist barr
 
 \input{OLTP_eval/Fig.PersistLatencyThroughput.tex}
 
-Figure~\ref{fig::PersistLatencyThroughput} shows transaction throughput as persist barrier latency increases from 0\textmu s to 5\textmu s, the range believed to encompass realistic latencies for possible implementations of persist barriers and storage architectures.
+Figure~\ref{fig::PersistLatencyThroughput} shows throughput for write-heavy transactions as persist barrier latency increases from 0\textmu s to 5\textmu s, the range believed to encompass realistic latencies for possible implementations of persist barriers and storage architectures.
 A persist barrier latency of 0\textmu s (left edge) corresponds to no barrier/DRAM latency.
 For such devices (e.g., battery-backed DRAM), \InPlace far out-paces \NVDisk, providing up to a 50\% throughput improvement.
 The speedup stems from a combination of removing WAL overheads, removing contention between page flushers and transaction threads, and freeing up (a few) threads from log and page flushers to run additional transactions.
@@ -137,6 +143,12 @@ TATP, unlike the other two workloads, only updates a single page per transaction
 Other overheads tend to dominate transaction time, resulting in a relatively shallow \InPlace curve.
 
 \input{OLTP_eval/Fig.PersistLatencyBreakeven.tex}
+
+The previous results show throughput only for a single transaction from each workload.
+Table~\ref{table::PersistLatencyBreakeven} shows break-even persist barrier latency between \NVDisk and \InPlace for these transactions and full transaction mixes.
+Full transaction mixes contain read-only transactions, reducing log insert and persist barrier frequency (read-only transactions require no recovery).
+\NVDisk sees improved throughput at 0 \textmu s and \InPlace's throughput degrades less quickly as persist barrier latency increases.
+As a result, the break-even persist barrier latency between these two designs increases for the full transaction mix relative to a single write-heavy transaction and the opportunity to improve throughput by optimizing recovery management diminishes---improved recovery management does not affect read-only transactions and actions.
 
 These results suggest different conclusions across storage architectures.
 NVRAM connected via the main memory bus will provide low latency persist barriers (less than 1\textmu s) and prefer \InPlace.
@@ -163,7 +175,7 @@ I measure transaction latency from the time a transaction begins to the time its
 
 The results illustrate that \GroupCommit is capable of providing equivalent throughput to the other recovery mechanisms with reasonable latency increases (no more than 5\texttimes).
 Further, high-percentile transaction latencies fall well below the latency expectations of modern applications.
-TPCC, the highest latency transaction, approaches optimal throughput with a 95th percentile transaction latency of 15ms---similar to latencies incurred by disk-backed databases.
+TPCC, the highest latency workload, approaches optimal throughput with a 95th percentile transaction latency of 15ms---similar to latencies incurred by disk-backed databases.
 For latency sensitive workloads, the batch period can be selected to precisely control latency, and \InPlace and \NVDisk remain alternatives.
 
 \subsection{Summary}
