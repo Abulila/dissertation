@@ -123,7 +123,7 @@ Then, the pages identified in the temporary table are fetched in order, and rele
 The rowid-sort scan has the advantage that each data page will be fetched from disk only once, even if multiple relevant tuples are located on the page. 
 This operation exists under several names.
 My description here fits the query plan explanation provided by IBM's DB2.
-Other databases use different terminology or algorithms to ensure that each store page is fetched exactly once (for example, PostgreSQL uses a bitmap index, sorting the list of pages with tuples that satisfy the query \cite{PostgresLossyBitMap}).
+Other databases use different terminology or algorithms to ensure that each heap page is fetched exactly once (for example, PostgreSQL uses a bitmap index, sorting the list of pages with tuples that satisfy the query \cite{PostgresLossyBitMap}).
 Rowid-sort scan is the optimal access path for intermediate selectivities.
 Section~\ref{sec:FlashOpti:Scans} investigates when optimal access path selection changes between disk and Flash.
 
@@ -162,13 +162,13 @@ Transaction writes coalesce in the buffer cache while being durably recorded in 
 
 The log improves disk write performance while simultaneously providing data recovery after failure.
 Transaction updates produce both redo and undo entries.
-Redo logs record actions performed on store pages so that they can be replayed if data has not yet written to disk in-place.
+Redo logs record actions performed on heap pages so that they can be replayed if data has not yet written to disk in-place.
 Undo logs provide roll back operations necessary to remove aborted and uncommitted transaction updates during recovery.
 The database occasionally places a checkpoint in the log, marking the oldest update within the database still volatile in the buffer cache (and therefore where recovery must begin).
-Recovery replays the redo log from the most recent checkpoint to the log's end, reproducing the state at failure in the buffer cache and store; i.e., ARIES ``replays history," recovering the failed database.
+Recovery replays the redo log from the most recent checkpoint to the log's end, reproducing the state at failure in the buffer cache and data store; i.e., ARIES ``replays history," recovering the failed database.
 Afterwards, incomplete transactions are removed using the appropriate undo log entries.
 
-While a centralized log orders all database updates, the software additionally enforces that log entries are durable before the store pages write back for each operation.
+While a centralized log orders all database updates, the software additionally enforces that log entries are durable before heap pages write back for each operation.
 Transactions commit by generating a commit log entry, which must necessarily become durable after the transaction's other log entries (since the log writes to disk in order).
 This process guarantees that no transaction commits, or page writes back to disk, without a durable history of its modifications in the log.
 

@@ -17,13 +17,13 @@ I wish to determine, for a given NVRAM read latency, how much caching is necessa
 The NVRAM read-performance model combines memory access trace analysis with the timing model to measure transaction throughput directly in Shore-MT.
 Traces consist of memory accesses to the buffer cache, collected running Shore-MT with PIN for a single transaction thread for two minutes.
 I assume concurrent threads exhibit similar access patterns.
-In addition, I record all latch events (acquire and release) and latch page information (i.e., table id, store type -- index, store, or other).
+In addition, I record all latch events (acquire and release) and latch page information (i.e., table id, store type -- index, heap, or other).
 I analyze traces at cache line (64 bytes) and page (8KB) granularity.
 
 These traces provide insight into how Shore-MT accesses persistent data, summarized in Table~\ref{table::AccessCharacteristics}.
 Index accesses represent the great majority of cache line accesses, averaging 84\% of accesses to NVRAM across workloads.
 Any caching efforts should focus primarily on index pages and cache lines.
-Note also that indexes access a greater number of cache lines per page access than other page types (average 11.54 vs 5.20 per store and 3.39 per other page types), suggesting that uncached index page accesses have the potential to introduce greater delays. 
+Note also that indexes access a greater number of cache lines per page access than other page types (average 11.54 vs 5.20 per heap and 3.39 per other page types), suggesting that uncached index page accesses have the potential to introduce greater delays. 
 
 \textbf{Throughput.}
 \input{OLTP_eval/Fig.ReadPerformance.tex}
@@ -50,7 +50,7 @@ While too large for on-chip caches, such a buffer might be possible as a hardwar
 \label{sec:OLTP_eval:Reads:Analysis}
 \input{OLTP_eval/Fig.Caching.tex}
 I have shown that modest cache sizes effectively hide NVRAM read stalls for these workloads, and further analyze caching behavior to reason about OLTP performance more generally.
-Figure~\ref{fig::Caching} shows the page miss rate per page type (index, store, or other) as page cache capacity increases.
+Figure~\ref{fig::Caching} shows the page miss rate per page type (index, heap, or other) as page cache capacity increases.
 Each graph begins at 1.0 at the left -- all page accesses miss for a single page cache.
 As cache capacity increases, workloads see their miss rates start to decrease between cache capacity of five and 20 pages.
 TATP experiences a decrease in misses only in index pages, whereas TPCB and TPCC see a decrease across all page types.
@@ -185,7 +185,7 @@ Different NVRAM storage architectures impose a variety of limitations on persist
 I intend to study the persist bandwidth requirements for each recovery mechanism.
 
 Recovery mechanisms display interesting behaviors with respect to bandwidth.
-\NVDisk persists inefficiently with respect to the total number of store bytes updated; even a small page update requires large log entries.
+\NVDisk persists inefficiently with respect to the total number of bytes updated; even a small page update requires large log entries.
 However, the log persist makes effective use of cache lines (the granularity that data must transfer to the memory device).
 Further, when increased recovery latency is allowable, bandwidth usage may be decreased by deferring page flushing, allowing writes to coalesce in pages.
 The result is that \NVDisk makes reasonable use of bandwidth, and bandwidth constraints are unlikely to limit throughput.
@@ -201,7 +201,7 @@ Only the first write to a given address produces undo, and only the final write 
 Other versions of data during the batch do not persist.
 The downside of \GroupCommit is that persists occur in bursts between batches.
 No data persists while the batch executes.
-Between batches however, all logs and store data persists, placing huge requirements on bandwidth.
+Between batches however, all logs and heap data persists, placing huge requirements on bandwidth.
 I intend to include a quantitative study of this behavior.
 
 \textbf{Device lifetime.}
