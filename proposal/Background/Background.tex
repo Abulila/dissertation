@@ -65,9 +65,8 @@ In particular, NVRAMs will likely provide somewhat higher access latency relativ
 Furthermore, several technologies are expected to have asymmetric read-write latencies, where writing to the device may take several microseconds \cite{QureshiSrinivasan09}.
 Write latency worsens with MLC, where slow, iterative writes are necessary to reliably write to a cell.
 
-Similarly to Flash, resistive NVRAM technologies suffer from limited write endurance; cells may be written reliably only a limited number of times.
-Previously proposed hardware mechanisms (e.g., Start-Gap \cite{QureshiKaridis09}) are highly effective in distributing writes across cells and can mitigate write endurance concerns.
-While such work focuses on volatile applications (NVRAM as a DRAM main memory substitute), it may be extended to durable uses.
+Similarly to Flash, resistive NVRAM technologies suffer from limited write endurance; cells may be written reliably a limited number of times.
+While write endurance is an important consideration, proposed hardware mechanisms (e.g., Start-Gap \cite{QureshiKaridis09}) are effective in distributing writes across cells, mitigating write endurance concerns.
 
 \textbf{NVRAM storage architectures.}
 Future database systems may incorporate NVRAM in a variety of ways.
@@ -165,7 +164,7 @@ Transaction updates produce both redo and undo entries.
 Redo logs record actions performed on heap pages so that they can be replayed if data has not yet written to disk in-place.
 Undo logs provide roll back operations necessary to remove aborted and uncommitted transaction updates during recovery.
 The database occasionally places a checkpoint in the log, marking the oldest update within the database still volatile in the buffer cache (and therefore where recovery must begin).
-Recovery replays the redo log from the most recent checkpoint to the log's end, reproducing the state at failure in the buffer cache and data store; i.e., ARIES ``replays history," recovering the failed database.
+Recovery replays the redo log from the most recent checkpoint to the log's end, reproducing the state at failure in the buffer cache; i.e., ARIES ``replays history," recovering the failed database.
 Afterwards, incomplete transactions are removed using the appropriate undo log entries.
 
 While a centralized log orders all database updates, the software additionally enforces that log entries are durable before heap pages write back for each operation.
@@ -175,7 +174,7 @@ This process guarantees that no transaction commits, or page writes back to disk
 Though complex, ARIES improves database performance with disks.
 First, log writes appear as sequential accesses to disk, maximizing device throughput.
 Additionally, aside from reads resulting from buffer cache misses, each transaction depends on device access only at commit to flush log entries.
-All updates to the data store may be done at a later time, off of transactions' critical paths.
+All disk writes to the heap may be done at a later time, off of transactions' critical paths.
 In this way ARIES is designed from the ground up to minimize the effect of large disk access latencies.
 
 \section{Memory consistency models}

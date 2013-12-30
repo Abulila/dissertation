@@ -235,9 +235,9 @@ I will include a quantitative evaluation of device lifetime by measuring the rat
 \label{sec:OLTP_eval:Conclusion}
 New NVRAM technologies offer an alternative to disk that provides high performance while maintaining durable transaction semantics, yet existing database software is not optimized for such storage devices.
 In this chapter, I evaluated recovery management to optimize for NVRAM read and persist characteristics.
-I found that on-chip or other hardware caches prove sufficient to minimize NVRAM read stalls.
+I found that even small caches effectively reduce NVRAM read stalls.
 I also considered database performance in the presence of persist barrier delays.
-As a drop-in replacement for disk, \NVDisk retains centralized logging overheads.
+Treating NVRAM as a drop-in replacement for disk, \NVDisk retains centralized logging overheads.
 \InPlace reduces these overheads, but for large persist barrier latencies suffers from excessive synchronization stalls.
-I proposed a new recovery mechanism, \GroupCommit, to minimize stalls due to persist synchronization while still removing centralized logging.
+I proposed a new recovery mechanism, \GroupCommit, to minimize these stalls while still removing centralized logging.
 While \GroupCommit increases high-percentile transaction latency, latency is controllable and within modern application constraints.
