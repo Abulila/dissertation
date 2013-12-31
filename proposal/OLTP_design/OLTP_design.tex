@@ -169,7 +169,7 @@ Instead, recovery relies on a database-wide undo log and staging buffer to provi
 
 \GroupCommit leverages byte-addressability to reduce persist barrier frequen\-cy by ordering persists at batch rather than transaction or page granularity.
 Batch commit resembles \texttt{persist\_page()}, used across the entire data\-base, once per batch.
-Because undo logging is managed at the batch level, transactions' updates may not persist in-place to NVRAM until all transactions in the batch complete.
+Because undo logging is managed at the batch level, transactions' updates must not persist in-place to NVRAM until all transactions in the batch complete (no-steal policy applied to batches).
 Rather, transactions write to a volatile staging buffer, tracking dirtied cache lines in a concurrent bit field.
 %The bit field facilities quickly finding all dirtied data at batch completion.
 Once the batch ends and all transactions complete, the pre-batch version of dirtied data is copied to the database-wide persistent undo log, only after which data is copied from the staging buffer in-place to NVRAM.
@@ -195,60 +195,77 @@ Persist barrier delays are amortized over additional transactions by increasing 
 Batch length must be large enough to dominate time spent quiescing transactions between batches.
 However, increasing batch length defers commit for all transactions in the batch, increasing transaction latency.
 
-\subsection{Proposed Work}
-\label{sec::OLTP_design:GroupCommit:Proposed}
+\subsection{High Performance Group Commit}
+\label{sec::OLTP_design:GroupCommit:Performance}
 
-\GroupCommit only improves throughput so long as the time between batches to quiesce transactions, locate dirtied data, and persist that data is substantially less than time during each batch where transactions execute.
-To provide a fair comparison between recovery mechanisms, I implement a functioning prototype of \GroupCommit in Shore-MT.
-Whereas I expect NVRAM to have sufficient bandwidth to persist data quickly, orchestrating data copies, tracking dirty data with low overhead, and locating dirty data efficiently proved to be difficult software problems.
-The details of this implementation were omitted from the VLDB submission, but are included here, including work to be done.
+\GroupCommit improves on \InPlace by minimizing persist barrier frequency.
+However, additional overheads are introduced to (i) track modified addresses while transactions execute, (ii) quiesce transactions at batch end, and (iii) persist and commit each batch.
+I outline new mechanisms to accelerate batch performance.
 
-\textbf{Concurrent Dirty Set.}
+\textbf{Hierarchical bitmap set.}
+Modified addresses must be tracked so that dirtied data is quickly logged and persisted at the end of each batch.
+Overhead when adding to the set of addresses must be low, and iteration over and clearing the set must be fast.
+I track modifications at cache line (64-byte) granularity.
+Logging and persisting occurs at this granularity.
+My first attempts considered a balanced tree set (STL set), which resulted in unacceptably large overheads to add to the set, and a bitmap set, which was too slow to iterate over---a 12GB buffer cache requires 24MB of bitmap, which simply requires too many instructions to search through.
+Instead, I leverage the fact that updates to the buffer cache by each batch are sparse to introduce a new set data structure, the \emph{hierarchical bitmap set}.
+
 \input{OLTP_design/Fig.bitset.tex}
-As described previously, \GroupCommit requires each batch to track dirty data.
-This is done with an efficient concurrent set, tracking the set of buffer pool cache lines dirtied by each batch.
-In order to maximize transaction throughput, this set must allow low overhead updates by concurrent threads during batch execution, and fast iteration during batch persist.
 
-Conventional implementations of set data structures prove insufficient.
-A set may be structured as a balanced tree, each node being a range of the dirty set.
-While such an implementation allows efficient iteration over the set between batches it imposes overheads to transaction execution (as transactions repeatedly search the set for the region they are about to modify).
-Instead, the set might be designed as a bitmap of dirty cache lines, each bit corresponding to a cache line in the buffer pool.
-A 12GB buffer pool requires 192MP of bits to track dirty cache lines.
-This set is efficiently updated with atomic OR operations and cleared at the beginning of each batch.
-However, iterating over the batch to return dirty addresses is too slow (compared to 10ms batch periods).
+The ideal set data structure would use an insert operation similar to the bitmap set (requiring only a bitwise-or operation) but iterate through the set faster.
+I observe that at the end of each batch only a small portion of the buffer cache is dirty---set iteration should recognize large contiguous blocks of clean addresses and skip these.
+The hierarchical bitmap set introduces an additional bitmap, the \emph{top level bitmap}, which indicates if an entire cache line of the \emph{primary bitmap} contains any 1s---each bit of the top level bitmap maps to 512 bits of the primary bitmap.
+Figure~\ref{fig::bitset} shows the hierarchical bitmap set.
+The top level bitmap (48kB) contains bits corresponding to cache lines of the primary bitmap (24MB) which in turn contains bits corresponding to cache lines of the heap (12GB buffer cache).
+In the Figure the first bit of the top level bitmap is set, denoting that at least one bit in the first cache line of the primary bitmap must be set.
+On the other hand, the second bit of the top level bitmap is not set, indicating that no bits in the second cache line of the primary bitmap are set, and that all corresponding cache lines in the heap are clean.
 
-Instead, I leverage the observation that dirty regions are rare and sparsely located throughput the buffer pool.
-Batches contain up to thousands of transactions, yet these transactions can only write a small portion of a 12GB buffer pool.
-It is therefore necessary to efficiently skip large regions of clean data when iterating through the dirty set.
-To achieve this, I present a \emph{tiered bitfield set}.
-The tiered bitfield set contains two bitfields.
-The first is as described above, where each bit corresponds to a cache line in the buffer pool, referred to as the \emph{primary bitfield}.
-In addition, there is a higher level bit field, each bit corresponding to a cache line of the primary bit field, called the \emph{top level bitfield}.
-Thus, a marked bit in the top level bit field indicates that at least one bit within the corresponding cache line of the primary bit field is set, which in turn correspond to dirty cache lines in the buffer pool.
+During batch execution addresses are added to the hierarchical bitmap set by setting the correct bits in both the primary and top level bitmaps.
+Since bits within the same byte in the top level bitmap correspond to different heap pages, and thus must allow concurrent operations, the top level bitmap must be updated using an atomic-or instruction.
+Iteration is performed by scanning the top level bitmap until a 1 is found, and then scanning the corresponding cache line of the primary bitmap.
+I additionally optimize bitmap scanning by testing data at eight-byte granularity, then one-byte granularity, and then by bit.
+Any block without a set bit (equal to zero) is skipped.
+Scanning at successively smaller granularity minimizes the number of instructions necessary to search the bitmap.
+Processor-specific instructions enable scanning of larger data blocks, but I found additional optimization unnecessary.
+Finally, the bitmaps are cleared using \emph{memset} and clean portions of the primary bitmap may be skipped.
 
-Updating this set requires atomic OR on the necessary bits in both bit fields of the set, a small cost.
-Iterating over the set involves iterating over the (much smaller) top level bit field, finding \emph{segments} of the primary bit field known to contain at least one set bit.
-This iteration reduces both the number of instructions and cache/memory lines accessed, minimizing persist time between batches.
+I map each bit of the top level bitmap to 64 bytes (512 bits) of the primary bitmap to minimize the number of cache lines accessed, but this mapping may be modified.
+Additional layers of bitmaps may also be added.
+These changes would depend on the access characteristics and sparseness of data within the set.
+My structure appears to match my workloads and minimizes insert, iteration, and clearing overheads.
 
-I propose to include additional work demonstrating the sparse nature of writes to the buffer pool, as well as timing results that show that fast dirty line tracking and persist is possible.
-Additionally, I believe this data structure will be effective for any batched persist application.
-
-\textbf{Concurrent Persist.}
+\textbf{Concurrent batch persist.}
 I have shown that dirty lines can be tracked and iterated over efficiently.
 However, persisting each batch with the batch coordinator alone results in long persist delays.
 These delays are due to the \emph{software} overhead of copying data, not NVRAM limitations.
 To reduce these delays persist operations must be parallelized across threads.
-Luckily, unused threads exist -- transaction threads that have quiesced between batches.
-Instead of sitting idle, these threads participate in persisting each batch.
+I use quiesced transaction threads, formerly waiting for the previous batch to commit, to log and persist the batch and accelerate batch commit.
 
-The buffer pool address space and corresponding portions of the dirty line set are partitioned into several segments, each placed in a task queue.
+The buffer pool address space and corresponding portions of the primary bitmap are partitioned into segments and placed in a task queue.
 The batch coordinator and transaction threads blocked by the persist process each participate by accepting tasks to and persisting buffer pool partitions (both log and then data in-place).
 Once all tasks complete the batch commits, allowing the next batch to begin.
 
-I propose to include results showing that persist parallelization is necessary, but is an effective way to accelerate batching.
+\begin{table}
+  \centering
+  \begin{tabular}{l l}
+    \hline
+    Workload & Relative performance \\
+    \hline \hline
+    TPCC & 79.2\% \\
+    TPCB & 86.2\% \\
+    TATP & 83.8\% \\
+    \hline
+  \end{tabular}
+  \caption{\textbf{Concurrent \GroupCommit persist.} \GroupCommit must use many threads to concurrently persist the batch log and data.  Here I show the relative throughput of using only a single thread versus additionally using quiesced transaction threads to accelerate batch persist and commit.  Results assume a 20ms batch period.}
+  \label{table::ConcurrentPersist}
+\end{table}
 
-Once both of these optimizations are implemented the system is using all cores to persist, and profiling shows that \emph{memcpy} operations, copies from the buffer pool to the persistent address space, are the primary bottleneck (memcpy is implemented using fast SSE instructions and cannot be optimized further).
-Persist time is minimized, and there is little room left for improvement.
+Table~\ref{table::ConcurrentPersist} shows the relative slowdown that results from using only a single thread to persist and commit each batch using a 20ms batch period.
+At worst, 20\% throughput is lost (TPCC), yet all workloads suffer at least a 13.8\% slowdown.
+
+Using the hierarchical bitmap set and concurrent persist accelerates batch commit.
+Profiling indicates that \emph{memcpy} operations, copies from the buffer cache to the persistent address space, form the remaining bottleneck (memcpy is implemented using fast SSE instructions and cannot be optimized further).
+Persist time is minimized, with little room left for improvement.
 
 \section{Design Space}
 \label{sec:OLTP_design:Designs}
