@@ -370,7 +370,7 @@ Perfect wear leveling assumes a 32GB device.
 Without hardware wear leveling \NVDisk with instantaneous recovery (aggressive page flushing) and \InPlace require the greatest cell endurance.
 Both mechanisms persist each update directly to the NVRAM store.
 \NVDisk must additionally persist LSNs, which are the most persisted data, while LSNs are no longer used with \InPlace and \GroupCommit.
-Both of these configurations require greater cell endurance than what phase change memory is expected to achieve \fixme{cite and say what we are using ($10^9$?)}.
+Both of these configurations require greater cell endurance far greater than $10^8$ writes, the endurance expected of phase change memory \cite{BurrKurdi08}.
 
 \NVDisk with 3s recovery latency requires much lower cell endurance for a 10 year lifetime.
 Writes to heap pages coalesce and only occasionally persist to NVRAM.
@@ -379,10 +379,10 @@ However, doing so requires an increase in recovery latency.
 \NVDisk may possibly provide acceptable software wear leveling so long as recovery latency is reasonable.
 
 Finally, \GroupCommit provides wear leveling by only allowing a single persist to each address per batch (all other persists coalesce).
-However, 20ms batches are unable to coalesce enough writes to guarantee a 10 year device lifetime.
-Using \GroupCommit to wear-level requires batch period, and therefore transaction latency, increase.
+However, 20ms nor 200ms batches are unable to coalesce enough writes to guarantee a 10 year device lifetime.
+\GroupCommit would require far too large a batch period, and therefore transaction latency, to reliably wear-level NVRAM.
 
-When hardware distributes persists evenly across NVRAM cells all recovery mechanisms achieve a 10 year lifetime.
+When hardware distributes persists evenly across NVRAM cells all recovery mechanisms achieve a 10 year lifetime assuming $10^8$ writes per cell.
 In this case lifetime is determined by the total number of persists rather than the most-persisted address.
 Due to the inability of software to reliably and sufficiently extend device lifetime, I expect future NVRAM SSDs to include hardware wear leveling.
 
