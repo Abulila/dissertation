@@ -1,6 +1,5 @@
 This chapter builds on the previous to investigate the performance effects of different caching architectures and recovery mechanisms for NVRAM.
-I look at NVRAM read and write performance concerns separately.
-Additionally, I propose to include additional investigations into important aspects of the system such as bandwidth constraints and device lifetime (based on write endurance), outlined in Section~\ref{sec:OLTP_eval:Proposed}.
+I introduce a methodology for evaluating database performance with upcoming NVRAMs and look at NVRAM read and write performance concerns separately.
 
 \section{Methodology}
 \label{sec:OLTP_design:Methodology}
@@ -33,13 +32,13 @@ Since NVRAM devices are not yet available, I must provide a timing model that mi
 I model NVRAM read and write delays by instrumenting Shore-MT with precisely controlled assembly-code delay loops to model additional NVRAM latency and bandwidth constraints at 13ns precision.
 Hence, Shore-MT runs in real time as if its buffer cache resided in NVRAM with the desired read and write characteristics.
 
-I create NVRAM delays using the x86 RDTSCP instruction, which returns a CPU-frequency-invariant, monotonically increasing time-stamp that increments each clock tick.
+I introduce NVRAM delays using the x86 RDTSCP instruction, which returns a CPU-frequency-invariant, monotonically increasing time-stamp that increments each clock tick.
 RDTSCP is a synchronous instruction---it does not allow other instructions to reorder with it.
 The RDTSCP loop delays threads in increments of 13ns (latency per loop iteration and RDTSCP) with an accuracy of 2ns.
 
 \input{OLTP_eval/Fig.Delay.tex}
 Figure~\ref{fig::Delay} shows the measured delay that results from iterating on an intended delay (both in ns).
-Each point shows the median of ten thousand delay trials (a small number of trials result in excessively large delays likely due to context switches and skew the mean).
+Points show the median of ten thousand delay trials (a small number of trials result in excessively large delays, likely due to context switches, and skew the mean).
 The delay function resembles a step function---delays may only be inserted in multiples of the loop iteration latency.
 
 To better understand delay behavior I perform a least squares regression of a step function against the measured data of the form:
@@ -47,11 +46,10 @@ $$delay(intended) = a \times floor(intended / a + b) + c$$
 which results in an $R^2$ of .997 and the following parameter values: $a = 12.5$, $b=.434$, and $c=10.1$.
 This indicates that each iteration takes 12.5ns.
 
-As delays can only be introduced in steps I subtract 9.3ns from the intended delay which matches the intended delay to the closest step.
+As delays can only be introduced in steps I subtract 9.3ns from the intended delay to match the intended delay to the closest step.
 The resulting delay is within 6.25ns of the intended delay.
 However, a given delay contains a constant skew (for example, an intended delay of 30ns always results in a 35ns delay).
 As NVRAM persist latencies are expected to be in the hundreds of ns or greater, such error will negligibly affect my results.
-
 
 \textbf{Modeling NVRAM persist bandwidth.}
 In addition to NVRAM latency, I model shared NVRAM write bandwidth.
@@ -64,14 +62,14 @@ Upon success, the thread delays until the end of its reservation.
 The main limitation of this approach is that it cannot model reservations shorter than the delay required to perform a CAS to a contended shared variable.
 This technique models reservations above 120ns accurately, which is sufficient for my experiments.
 
-\input{OLTP_eval/Fig.Reservation.tex}
-
 Several factors affect the speed of bandwidth reservations (and therefore reservation accuracy) including the number of threads and their placement across sockets and cores.
-I tests the reservation system's accuracy by constraining thread placement while threads repeatedly reserve time and delay until the end of the reservation.
-When all available time is reserved reservation overhead is negligible and the modelled bandwidth is accurate.
+I test the reservation system's accuracy by constraining thread placement while threads repeatedly reserve time and delay until the end of the reservation.
+It all available time is reserved, reservation overhead is negligible and the modeled bandwidth is accurate.
 However, when reservation length is sufficiently short reservation overheads will dominate, resulting in unreserved time.
 
-Table~\label{table::Reservation} shows the required reservation length (in ns) to reserve 99\% of time with six and 12 threads.
+\input{OLTP_eval/Fig.Reservation.tex}
+
+Table~\ref{table::Reservation} shows the required reservation length (in ns) to reserve 99\% of time with six and 12 threads.
 Additionally, the Table shows different thread placement across sockets and cores.
 ``Spread" implies assigning threads round-robin to all available resources, while ``pack" indicates that each resource is filled before assigning any threads to the next.
 For example, assigning six threads in a pack sockets--spread cores policy (on a two socket server, each with six cores and two-way SMT) results in all six threads scheduled on the same socket but each thread on its own core (thus SMT is unused).
@@ -87,11 +85,10 @@ The required time decreases from six to 12 threads as more threads are available
 
 These results suggest that bandwidth reservations will be accurate so long as each reservation exceeds 120ns.
 In Shore-MT I reserve bandwidth for each cache line persisted.
-The persist bandwidth analysis study (presented later in Section~\fixme{number}) shows that 35ns per cache line (approximately 1.7GB/s persists) represents sufficient bandwidth to negligibly limit performance.
+The persist bandwidth analysis study (presented later in Section~\ref{sec:OLTP_eval:Persists:Limitations}) shows that 35ns per cache line (approximately 1.7GB/s persists) represents sufficient bandwidth to negligibly limit performance.
 Since at least four cache lines are always reserved together (in \texttt{persist\_page} and \texttt{persist\_wal}) the bandwidth reservation is accurate.
 
 \textbf{NVRAM performance.}
-
 I introduce NVRAM read and write delays separately.
 Accurately modeling per-access increases in read latency is challenging, as reads are frequent and the expected latency increases on NVRAM are small.
 It is infeasible to use software instrumentation to model such latency increases at the granularity of individual reads; hardware support, substantial time dilation, or alternative evaluation techniques (e.g., simulation) would be required, all of which compromise accuracy and the ability to run experiments at full scale.
@@ -334,11 +331,11 @@ The \NVDisk configuration flushes pages aggressively (attempts to flush continuo
 Since bandwidth is restricted recovery latency may increase (not reflected in the results).
 Page flushing contends with log flushing for bandwidth, but so long as log flushes are minimally delayed throughput will not be affected.
 TATP, which contains short transactions, requires the most bandwidth (1.7GB/s) to reduce transaction commit delays.
-I believe that disk group commit (rather than synchronous commit) would alleviate this bandwidth requirement.
+I believe that asynchronous commit would alleviate this bandwidth requirement.
 TPCC, on the other hand, has long transactions and transaction commit is less of a concern.
 
 \InPlace requires the least bandwidth of the recovery mechanisms.
-TATP's Update Location transaction needs the least bandwidth (0.4GB/s) since each transaction contains only a single small update.
+TATP's Update Location transaction needs only 0.4GB/s since each transaction contains a single small update.
 TPCC's New Order transaction modifies much more data, requiring 0.8GB/s persist bandwidth to achieve 95\% throughput.
 
 Finally, \GroupCommit sees varying requirements on persist bandwidth.
@@ -346,7 +343,7 @@ All persists occur at batch boundaries, resulting in quick persist bursts.
 I consider two batch periods---20ms and 200ms.
 TATP and TPCC require relatively small bandwidths while TPCC requires over 1.5GB/s persist bandwidth to achieve 95\% throughput.
 The bursty nature of \GroupCommit and large modifications by TPCC's New Order transaction result in persist bandwidth quickly creating a bottleneck.
-Longer batches help slightly by allowing updates to coalesce within the batch (and thus reducing the total number of bytes persisted).
+Longer batches help slightly by allowing updates to coalesce within the batch, reducing the total number of bytes persisted.
 The bandwidth requirements would be reduced by introducing mechanisms to enable early persists (persist data before the batch ends).
 
 While persist bandwidth requirements vary, the strictest configuration (\NVDisk for TATP) requires only 1.7GB/s.
@@ -354,7 +351,7 @@ Such bandwidth is currently possible with existing PCIe flash memory SSDs, and I
 Thus, I conclude that persist bandwidth will not be a concern for OLTP systems using NVRAM.
 
 \textbf{Device lifetime.}
-NVRAM technologies, much like Flash memory currently, will have limited write endurance; each cell may only be reliably written to a finite number of times.
+NVRAM technologies, much like Flash memory currently, will have limited write endurance; each cell may only be reliably written a finite number of times.
 Device lifetime is generally determined by the most frequently written addresses.
 Previous work proposes hardware techniques to evenly distribute writes amongst cells by constantly changing the mapping between between memory addresses and the underlying memory cell \cite{QureshiKaridis09}.
 These techniques prolong device lifetime by ensuring that frequently written addresses do not wear out individual cells.
@@ -366,10 +363,9 @@ Persists are tracked at byte granularity.
 I consider two scenarios: no wear leveling---lifetime is limited by the most frequently written address, and perfect wear leveling---all persists are evenly distributed across all physical addresses (provided in hardware).
 I consider \NVDisk with instantaneous recovery and 3s recovery latency, \InPlace, and \GroupCommit with 20ms and 200ms batch latencies.
 All recovery mechanisms assume \InPlace's throughput for a more fair comparison.
-
 Logs are implemented as circular buffers.
 Thus, logs do not contribute to the most written byte and have no bearing on device lifetime without hardware wear leveling.
-With perfect wear leveling a 32GB device is assumed.
+Perfect wear leveling assumes a 32GB device.
 
 Without hardware wear leveling \NVDisk with instantaneous recovery (aggressive page flushing) and \InPlace require the greatest cell endurance.
 Both mechanisms persist each update directly to the NVRAM store.
