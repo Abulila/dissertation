@@ -1,15 +1,9 @@
 The following two chapters consider the impact of using emerging NVRAM technologies for durable transaction processing.
 Refer to Section~\ref{sec:Background:Storage:NVRAM} for an overview of storage technologies and Section~\ref{sec:Background:Recovery} for a description of ARIES, a popular recovery mechanism for disk.
-Work relating to the next two chapters is currently under review at VLDB.
+The work presented in these two chapters was originally published in VLDB 2014 \cite{Pelley13}.
 I completed this work under the guidance of my advisor, Thomas F. Wenisch, and collaborators at Oracle, Brian T. Gold and Bill Bridge.
-I was the sole graduate student and technical contributer (programming and running experiments) for the project, although my co-authors heavily contributed to developing the following ideas.
 I would especially like the thank Brian and Bill for bringing industry's point of view and ``real world" examples to this collaboration.
-
 This chapter outlines the problems with existing disk recovery management, the potential pitfalls of using NVRAM for persistent applications, a methodology for evaluating NVRAM devices that are not yet available, and a description of several candidate software designs for NVRAM recovery management, to be evaluated in the next chapter.
-I consider this chapter largely complete with two exceptions.
-First, I have validated my timing model and intend to include results in the final thesis \ref{sec:OLTP_design:Methodology:Proposed}.
-Second, my implementation of \GroupCommit is more complex than a 12 page journal paper allows room to describe.
-I intend to include a detailed description in Section~\ref{sec::OLTP_design:GroupCommit:Proposed}.
 
 \section{Introduction}
 \label{sec:OLTP_design:Intro}
@@ -24,12 +18,12 @@ Today, OLTP systems are designed from the ground up to circumvent disk's perform
 For example, many popular database systems use Write-Ahead Logging (WAL; e.g., ARIES \cite{MohanHaderle92}) to avoid expensive random disk writes by instead writing to a sequential log.  
 Although effective at hiding write latency, WAL entails substantial software overheads.
 
-NVRAM offers an opportunity to simultaneously improve database forward-processing throughput and recovery latency by rethinking mechanisms that were designed to address the limitations of disk.
+NVRAM offers an opportunity to simultaneously improve database transaction processing throughput and recovery latency by rethinking mechanisms that were designed to address the limitations of disk.
 Figure~\ref{fig::Recovery} demonstrates this potential, displaying recovery time and transaction throughput for the TPCB workload running on the Shore-MT storage manager \cite{JohnsonPandis09} for hypothetical NVRAM devices (see Section~\ref{sec:OLTP_design:Methodology} for a description of the methodology).
 
 \input{OLTP_design/Fig.Recovery.tex}
 
-The ARIES/WAL points (black circles) in the Figure show forward-processing throughput (horizontal axis) and recovery time (vertical axis) as a function of device write throughput (annotated alongside each point).
+The ARIES/WAL points (black circles) in the Figure show forward-processing throughput (horizontal axis) and recovery time (vertical axis) as a function of device write throughput (annotated alongside each point as pages per second).
 As database throughput can greatly outpace existing storage devices (this configuration requires 6,000 page writes/s to bound recovery; measured disk and flash devices provide only 190 and 2,500 page writes/s, respectively) I model recovery performance under faster NVRAM using a RAM disk for log and heap while limiting the page flush rate.
 As intuition would suggest, greater write bandwidth enables more aggressive flushing, minimizing the number of dirtied pages in the buffer cache at the time of failure, in turn reducing recovery time.
 With enough write bandwidth (in this case, 127,000 flushes/s, or 0.97 GB/s random writes for 8KB pages) the database recovers near-instantly, but forward-processing performance remains compute bound.
@@ -45,12 +39,12 @@ In this chapter, I investigate how to redesign durable storage and recovery mana
 NVRAMs, however, are not without their limitations.
 Se\-veral candidate NVRAM technologies exhibit larger read latency and significantly larger write latency compared to DRAM.
 Additionally, whereas DRAM writes benefit from caching and typically are not on applications' critical paths, NVRAM writes must become persistent in a constrained order to ensure correct recovery.
-I consider an NVRAM access model where correct ordering of persistent writes is enforced via \emph{persist barriers}, which stall until preceding NVRAM writes are complete; such persist barriers can introduce substantial delays when NVRAM writes are slow.
+I consider an NVRAM access model where correct ordering of persistent writes is enforced via \emph{persist barriers}, which stall until preceding NVRAM writes complete; such persist barriers can introduce substantial delays when NVRAM writes are slow.
 
 This chapter outlines an approach to architecting recovery management for transaction processing using NVRAM technologies.
 I discuss potential performance concerns for both disk and NVRAM, proposing software designs to address these problems.
-Additionally, I outline an NVRAM performance evaluation framework, involving memory trace analysis, code annotation, and precise timing models for OLTP running on existing hardware platforms.
-Subsequent chapters will build on the designs and methodology presented here to determine when OLTP must be redesigned and what problems might remain.
+Additionally, I outline an NVRAM performance evaluation framework involving memory trace analysis, code annotation, and precise timing models for OLTP running on existing hardware platforms.
+Subsequent chapters build on the designs and methodology presented here to determine when OLTP must be redesigned and what problems remain.
 
 \section{Recovery Management Design}
 \label{sec:OLTP_design:Design}
@@ -122,7 +116,7 @@ While requiring the least engineering effort, \NVDisk contains large software ov
 Next, I leverage NVRAM's low latency to reduce these overheads.
 
 \textbf{In-Place Updates.}
-Fast, byte-addressable NVRAM allows data to persist in-place, enforcing persist order immediately in a design we call \InPlace.
+Fast, byte-addressable NVRAM allows data to persist in-place, enforcing persist order immediately in a design called \InPlace.
 \InPlace permits the centralized log to be removed by providing redo and undo log functionality elsewhere.
 I remove redo logs by keeping the database's durable state up-to-date.
 %In ARIES terms, the database is constantly at its replayed state---there is no need to replay a redo log after failure.
@@ -134,7 +128,7 @@ I remove redo logs by keeping the database's durable state up-to-date.
 In ARIES terms, the database maintains its replayed state---there is no need to replay a redo log after failure.
 Undo logs need not be ordered across transactions (transactions are free to roll back in any order), so we distribute ARIES undo logs by transaction.
 Such private logs are simpler and impose fewer overheads than centralized logs.
-Other databases (such as Oracle) already distribute undo logs in rollback segments and undo table spaces and do not require additional distributed undo mechanisms \cite{OracleDoc}.
+Other databases (such as Oracle) already distribute undo logs in rollback segments and undo table spaces \cite{OracleDoc}.
 Transaction undo logs remain durable so that in-flight transactions can be rolled back after failure.
 Page updates (1) latch the page, (2) insert an undo entry into the transaction-private undo log using \texttt{persist\_wal()}, (3) update the page using \texttt{persist\_page()} (without an intermediate volatile page), and (4) release the page latch.
 This protocol ensures all updates to a page, and updates within a transaction, persist in-order, and that no transaction reads data from a page until it is durable.
@@ -203,11 +197,11 @@ However, additional overheads are introduced to (i) track modified addresses whi
 I outline new mechanisms to accelerate batch performance.
 
 \textbf{Hierarchical bitmap set.}
-Modified addresses must be tracked so that dirtied data is quickly logged and persisted at the end of each batch.
-Overhead when adding to the set of addresses must be low, and iteration over and clearing the set must be fast.
+Modified addresses must be tracked so that dirtied data can be quickly located and persisted at the end of each batch.
+Adding to, iterating over, and clearing the set must be fast.
 I track modifications at cache line (64-byte) granularity.
-Logging and persisting occurs at this granularity.
-My first attempts considered a balanced tree set (STL set), which resulted in unacceptably large overheads to add to the set, and a bitmap set, which was too slow to iterate over---a 12GB buffer cache requires 24MB of bitmap, which simply requires too many instructions to search through.
+Batch logging and persisting additionally occurs at this granularity.
+My first attempts considered a balanced tree set (STL set), which resulted in unacceptably large overheads to add to the set, and a bitmap set, which provided slow iteration---a 12GB buffer cache implies 24MB of bitmap, which requires too many instructions to scan quickly.
 Instead, I leverage the fact that updates to the buffer cache by each batch are sparse to introduce a new set data structure, the \emph{hierarchical bitmap set}.
 
 \input{OLTP_design/Fig.bitset.tex}
@@ -224,10 +218,10 @@ During batch execution addresses are added to the hierarchical bitmap set by set
 Since bits within the same byte in the top level bitmap correspond to different heap pages, and thus must allow concurrent operations, the top level bitmap must be updated using an atomic-or instruction.
 Iteration is performed by scanning the top level bitmap until a 1 is found, and then scanning the corresponding cache line of the primary bitmap.
 I additionally optimize bitmap scanning by testing data at eight-byte granularity, then one-byte granularity, and then by bit.
-Any block without a set bit (equal to zero) is skipped.
+Any block without a set bit (i.e., the block equals zero) is skipped.
 Scanning at successively smaller granularity minimizes the number of instructions necessary to search the bitmap.
 Processor-specific instructions enable scanning of larger data blocks, but I found additional optimization unnecessary.
-Finally, the bitmaps are cleared using \emph{memset} and clean portions of the primary bitmap may be skipped.
+Finally, the bitmaps are cleared using \emph{memset}, while clean portions of the primary bitmap may be skipped.
 
 I map each bit of the top level bitmap to 64 bytes (512 bits) of the primary bitmap to minimize the number of cache lines accessed, but this mapping may be modified.
 Additional layers of bitmaps may also be added.
@@ -241,8 +235,8 @@ These delays are due to the \emph{software} overhead of copying data, not NVRAM 
 To reduce these delays persist operations must be parallelized across threads.
 I use quiesced transaction threads, formerly waiting for the previous batch to commit, to log and persist the batch and accelerate batch commit.
 
-The buffer pool address space and corresponding portions of the primary bitmap are partitioned into segments and placed in a task queue.
-The batch coordinator and transaction threads blocked by the persist process each participate by accepting tasks to and persisting buffer pool partitions (both log and then data in-place).
+The buffer cache address space and corresponding portions of the primary bitmap are partitioned into segments and placed in a task queue.
+The batch coordinator and transaction threads blocked by the persist process each participate by processing tasks, persisting buffer cache partitions (both log and then data in-place).
 Once all tasks complete the batch commits, allowing the next batch to begin.
 
 \begin{table}
@@ -262,6 +256,7 @@ Once all tasks complete the batch commits, allowing the next batch to begin.
 
 Table~\ref{table::ConcurrentPersist} shows the relative slowdown that results from using only a single thread to persist and commit each batch using a 20ms batch period.
 At worst, 20\% throughput is lost (TPCC), yet all workloads suffer at least a 13.8\% slowdown.
+Threads must persist each batch concurrently to achieve the throughput of \InPlace while remaining resilient to large persist barrier latency.
 
 Using the hierarchical bitmap set and concurrent persist accelerates batch commit.
 Profiling indicates that \emph{memcpy} operations, copies from the buffer cache to the persistent address space, form the remaining bottleneck (memcpy is implemented using fast SSE instructions and cannot be optimized further).
@@ -323,6 +318,14 @@ Finally, Fang \emph{et al.} develop a new WAL infrastructure for NVRAM that leve
 Fang aims to improve transaction throughput but retains centralized logging.
 I distinguish myself by investigating how NVRAM write performance guides database and recovery design more generally.
 
+More similar to my work, Coburn \emph{et al.} introduce hardware support for durable transactions in NVRAM storage devices \cite{Coburn13}.
+These \emph{editable atomic writes} provide the same functionality as traditional ARIES logs.
+Such hardware must still serialize and persist log entries; contention while serializing entries and ordering persists may still limit system throughput.
+Finally, editable atomic writes use physical logging (updates are recorded as location-data-length tuples), as opposed to logical logging (updates are recorded as a set of data and functions to apply/roll back the update).
+Logical logging is necessary to precisely control data placement in the presence of concurrent transactions.
+For example, to maintain B+Tree elements in sorted order within a page each transaction may have to modify large portions of the page (to shift entries), even if those entries were recently modified by an outstanding transaction.
+It is unclear if physical logging provides all the features we expect from ARIES.
+
 %While different than byte addressable NVRAMs, Flash memory has become an important storage medium.
 %Similar in theme to this work, numerous authors have considered designing databases specifically for Flash (\cite{BernsteinReid11}, \cite{SarwatMokbel11}).
 %NVRAM, unlike Flash, allows more efficient in-place updates through byte-addressability, low persist latency, and atomic persists.
@@ -334,5 +337,4 @@ I argue that computers and storage systems will always fail, and durability rema
 \label{sec:OLTP_design:Conclusion}
 This chapter motivated the need to reconsider system design for NVRAM recovery management.
 I highlight possible caching architectures as well as three candidate recovery management software designs and their implementations.
-Further, I provide a methodology for evaluating these systems based on memory trace analysis and read-hardware timing models.
-The next chapter uses this methodology to compare these system designs.
+The next chapter compares these system designs, considering performance related to NVRAM read and persist latencies.
