@@ -261,12 +261,11 @@ For fine-grained tracking persist epochs provides far lower persist critical pat
 As tracking granularity increases, strict persistency performance remains the same while persist epochs decreases (critical path increases).
 At 512 byte tracking granularity strict and persist epochs provide comparable persist critical path; many of the persist constraints removed by relaxing consistency are reintroduced through false sharing.
 
-
-
+\section{Conclusion}
+\label{sec:PersistencyEval:Conclusion}
 
 Future NVRAM technologies offer the performance of DRAM with the durability of disk.
 However, existing memory interfaces are incapable of leveraging this performance while simultaneously enforcing proper data recovery.
-In this paper we introduced \emph{memory persistency}, an extension of memory consistency that allows programmers to describe persist order constraints.
-We outline the design space of possible memory persistency models.
-In addition, we detail three persisteny models and their use in implementing a persistent queue.
-Using memory tracing and simulation we demonstrate that strict persistency models suffer a 30$\times$ slowdown relative to instruction execution rate, and that relaxed persistency effectively regains this performance.
+In previous chapters I introduced \emph{memory persistency}, an extension of memory consistency that allows programmers to describe persist order constraints.
+Additionally, I outlined the design space of possible memory persistency models and detailed three persisteny models and their use in implementing a persistent queue.
+In this chapter I used memory tracing and simulation to demonstrate that strict persistency models suffer a 30$\times$ slowdown relative to instruction execution rate, and that relaxed persistency effectively regains this performance.
