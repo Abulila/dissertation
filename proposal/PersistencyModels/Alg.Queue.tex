@@ -1,0 +1,47 @@
+\begin{algorithm}
+  \caption{Psuedo-code for Insert operations.  We include the annotations required by our relaxed persistency models, discussed in Section~\ref{section:PersistencyModels}.  $PersistBarrier$ applies to epoch persistency and persist strands, $NewStrand$ applies only to persist strands.}
+  \label{Alg::Queue}
+  \begin{algorithmic}[1]
+  \Require $head$ is a persistent pointer, $data$ a persistent array.
+  \State $sl \gets$ \Call{sizeof}{length}
+  \Function{InsertCWL}{$length$, $entry$}
+    \State \Call{lock}{$queueLock$}
+    \State \Call{NewStrand}{}
+    \State \Call{copy}{$data[head]$, ($length$, $entry$), $length+sl$}
+    \State \Call{PersistBarrier}{}
+    \State $head \gets head+length+sl$
+    \State \Call{unlock}{$queueLock$}
+  \EndFunction
+  \State
+  \Function{Insert2LC}{$length$, $entry$}
+    \State \Call{lock}{$reserveLock$}
+    \State $start \gets headV;$ $headV \gets headV+length+sl$
+    \State $node \gets insertList$.\Call{append}{$headV$}
+    \State \Call{unlock}{$reserveLock$}
+    \State \Call{NewStrand}{}
+    \State \Call{copy}{$data[head]$, ($length$, $entry$), $length+sl$}
+    \State \Call{lock}{$updateLock$}
+    \State ($oldest$, $newHead$) $\gets insertList$.\Call{remove}{$node$}
+    \State \Call{unlock}{$updateLock$}
+    \If{$oldest$}
+      \State \Call{PersistBarrier}{}
+      \State $head \gets newHead$
+    \EndIf
+    \State $unlock(reserveLock)$
+  \EndFunction
+  \State
+  \Function{InsertQH}{$length$, $entry$}
+    \State \Call{lock}{$queueLock$}
+    \State \Call{NewStrand}{}
+    \State $start \gets head$; $endPos \gets start+length+sl$ %\Comment{marks $endBit$}
+    \State $data[start] \gets length$; $data[endPos] \gets 0$
+    \State \Call{PersistBarrier}{}
+    \State $head \gets head+length+sl+1$
+    \State \Call{unlock}{$queueLock$}
+    \State \Call{copy}{$data[start+sl]$, $entry$, $length$}
+    \State \Call{PersistBarrier}{}
+    \State $data[endPos] \gets 1$
+  \EndFunction
+  \end{algorithmic}
+\end{algorithm}
+
