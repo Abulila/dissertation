@@ -1,0 +1,21 @@
+\begin{table*}
+  \centering
+  \begin{tabular}{ l l l l l l l l l l }
+    \hline
+    Threads & \multicolumn{3}{c}{Copy While Locked} & \multicolumn{3}{c}{Two-Lock Concurrent} & \multicolumn{3}{c}{Queue Holes} \\
+    & Strict & Epochs & Strands & Strict & Epochs & Strands & Strict & Epochs & Strands \\
+    \hline \hline
+    %1 & 0.03402668948225257 & 0.17329066524439704 & 12.395878787878786 & 0.07956161591630416 & 0.5569551810923878 & 28.931290043290044 & 0.03243921666510665 & 0.17329066524439704 & 13.36387317909169 \\
+    %8 & 0.05787677206992028 & 3.167189491481337 & 21.084432900432898 & 0.4319337035691424 & 3.3529680365296803 & 21.615757575757577 & 0.2539605628870943 & 1.9442439473904665 & 19.535723905723902 \\
+    1 & 0.034 & 0.17 & \textbf{12} & 0.080 & 0.56 & \textbf{29} & 0.032 & 0.17 & \textbf{13} \\
+    8 & 0.058 & \textbf{3.2} & \textbf{21} & 0.43 & \textbf{3.4} & \textbf{22} & 0.25 & \textbf{1.9} & \textbf{20} \\
+    \hline
+  \end{tabular}
+  \caption{
+    \textbf{Relaxed Persistency Performance.}
+    Persist-bound insert rate normalized to instruction execution rate assuming 500ns persist latency.
+    System throughput is limited by the lower of persist and instruction rates---at greater than 1 (bold) instruction rate limits throughput; at lower than 1 execution is limited by the rate of persists.
+    While strict persistency limits throughput, persist epochs maximizes performance for many threads and persist strands are necessary to maximize performance with one thread.
+  }
+  \label{table::RelaxedPerformance}
+\end{table*}
