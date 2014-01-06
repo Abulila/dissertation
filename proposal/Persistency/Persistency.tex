@@ -1,7 +1,10 @@
-This chapter motivates and defines \emph{memory persistency}.
+The previous chapters considered how to design recoverable software assuming various latencies for persist barriers.
+However, the memory system implementation remained unspecified, and ultimately will determine performance.
+The remainder of this thesis in turn investigates programming interfaces for persistent memory and how the interface might affect system performance.
+
+This chapter motivates and defines \emph{memory persistency}, a framework for reasoning about and enforcing the order of persist operations.
+The following chapters propose and evaluate example persistency models.
 Refer to Section~\ref{sec:Background:MemoryConsistency} for a discussion of memory consistency and consistency models.
-In this chapter I first motivate and define memory persistency.
-The following chapters outline and evaluate example persistency models.
 
 \section{Introduction}
 \label{sec:Persistency:Intro}
@@ -13,66 +16,67 @@ Future systems will place these devices on a DRAM-like memory bus, providing sys
 However, ensuring proper recovery requires constraints on the ordering of NVRAM writes.
 Existing DRAM interconnects lack the interface to describe and enforce write ordering constraints; ordering constraints that arise from memory consistency requirements are usually enforced at the processor, which is insufficient for failure tolerance with acceptable performance.
 Recent work has suggested alternative interfaces to enforce NVRAM write order and guarantee proper recovery, for example durable transactions and persist barriers \cite{Volos11, Condit09}.
-While intuitive and suitable to specific applications, we wish to investigate a more general framework for reasoning about NVRAM write ordering including mechanisms for expressing write constraints that are independent of specific concurrency control mechanisms.
+While intuitive and suitable to specific applications, I wish to investigate a more general framework for reasoning about NVRAM write ordering including mechanisms for expressing write constraints that are independent of specific concurrency control mechanisms.
 
-Instead, we recognize that the problem of constraining NVRAM write concurrency strongly resembles memory consistency.
+Instead, I recognize that the problem of constraining NVRAM write concurrency strongly resembles memory consistency.
 Memory consistency restricts the visible order of loads and stores (equivalently, allowable visible memory states) between processors or cores, allowing operations to reorder so long as expected behavior is guaranteed.
 Memory consistency models provide an interface and set of memory order guarantees for the programmer, but separate the implementation; several distinct implementations may fulfill the same memory consistency model, allowing sophisticated optimization (e.g., speculation \cite{Blundell09,Wenisch07,Ceze07,Gniady99,Ranganathan97}).
 Relaxing the memory consistency model places an additional burden on the programmer to understand the model and insert the correct annotations, but often allows greater performance.
 
-We introduce \emph{Memory Persistency}, a framework motivated by memory consistency to provide an interface for enforcing the order NVRAM writes become durable, an operation we refer to as a ``persist''.
+I introduce \emph{Memory Persistency}, a framework motivated by memory consistency to provide an interface for enforcing the order in which NVRAM writes become durable, an operation we refer to as a ``persist'' (as in previous chapters).
 Memory persistency prescribes the order of persist operations with respect to one another and loads and stores, and allows the programmer to reason about guarantees on the ordering of persists with respect to system failures.
 The memory persistency model relies on the underlying memory consistency model and volatile memory execution to define persist ordering constraints and the values written to persistent memory.
 
-In this paper, we define memory persistency, describe the design space of memory persistency models, and introduce and evaluate several new persistency models.
-Much like consistency, we identify \emph{strict} and \emph{relaxed} classes of persistency models.
+In the following chapters, I define memory persistency, describe the design space of memory persistency models, and introduce and evaluate several new persistency models.
+Much like consistency, I identify \emph{strict} and \emph{relaxed} classes of persistency models.
 Strict persistency relies on implicit guarantees to order persists and couples persistent semantics to the underlying memory consistency model: any two stores to the persistent address space that are guaranteed to be observed in a well-defined order from the perspective of a third processor imply well-ordered NVRAM writes.
 Thus, the same mechanisms the consistency model provides a programmer to enforce order for stores also enforce order for the corresponding persists. 
 Alternatively, relaxed persistency separates volatile and persistent memory execution, allowing the order of persist operations to differ from the order in which the corresponding stores become visible.
-Relaxed persistency facilitates concurrent persists even under sequential consistency.  Memory persistency further provides an interface for uniprocessors, which may not ordinarily order stores, to specify persist ordering constraints.
+Relaxed persistency facilitates concurrent persists even under sequential consistency.
+Memory persistency further provides an interface for uniprocessors, which may not ordinarily order stores, to specify persist ordering constraints.
 While separating memory consistency and persistency provides advantages to programmability and performance, it also introduces new challenges, as separate annotations define allowable reorderings for visibility and persistence of writes to the persistent address space.
 
-Using this framework, we introduce successively relaxed memory persistency models and demonstrate how programmers can exploit the reorderings they allow through several example implementations of a thread-safe persistent queue.
-We discover that conservative memory consistency (such as sequential consistency) with strict persistency must rely on thread parallelism to enable NVRAM write concurrency.
+Using this framework, I introduce successively relaxed memory persistency models and demonstrate how programmers can exploit the reorderings they allow through several example implementations of a thread-safe persistent queue.
+I demonstrate that conservative memory consistency (such as sequential consistency) with strict persistency must rely on thread parallelism to enable NVRAM write concurrency.
 On the other hand, relaxed persistency allows high instruction execution performance, NVRAM write concurrency, and simplified data structures.
 
-Finally, we evaluate our memory persistency models and queue designs.
+Finally, I evaluate my memory persistency models and queue designs.
 Just as with memory consistency, a memory persistency model is defined separately from its implementation.
-Instead of assuming specific storage technologies and memory system implementations, we measure NVRAM write performance as the critical path of persist ordering constraints, assuming that NVRAM writes form the primary system bottleneck and that practical memory systems effectively use available concurrency.
-We demonstrate that relaxed persistency models substantially improve write-concurrency over sequential consistency with strict persistency; for a 500ns NVRAM write latency, these concurrency gains improve performance to the throughput limit of instruction execution---as much as 30x speedup over strict persistency.
+Instead of assuming specific storage technologies and memory system implementations, I measure NVRAM write performance as the critical path of persist ordering constraints, assuming that NVRAM writes form the primary system bottleneck and that practical memory systems effectively use available concurrency.
+I demonstrate that relaxed persistency models substantially improve write-concurrency over sequential consistency with strict persistency; for a 500ns NVRAM write latency, these concurrency gains improve performance to the throughput limit of instruction execution---as much as 30x speedup over strict persistency.
 
 \section{Memory Persistency Goals}
 \label{sec:Persistency:Goals}
 
 Correct recovery of durable systems requires persists to observe some set of happens-before relations, for example, that persists occur before an externally observable action, such as a system call.  
-However, we expect NVRAM writes to be much slower than writes to volatile memory.
-Provided the minimal set of happens-before relationsis observed, the gap between volatile execution and NVRAM write performance can be shrunk by optimizations that increase concurrency. 
-We are interested in defining persistency models that create opportunities for two specific optimizations: \emph{persist buffering}, and \emph{persist coalescing}.
+However, I expect NVRAM writes to be much slower than writes to volatile memory.
+Provided the minimal set of happens-before relations is observed, the gap between volatile execution and NVRAM write performance can be shrunk by optimizations that increase concurrency. 
+I am interested in defining persistency models that create opportunities for two specific optimizations: \emph{persist buffering}, and \emph{persist coalescing}.
 
 \textbf{Persist Buffering.}
 Buffering durable writes and allowing thread execution to proceed ahead of persistent state greatly accelerates performance \cite{Condit09}.
 Such buffering overlaps NVRAM write latency with useful execution. 
-To be able to reason about buffering, we draw a distinction between a ``store'', the cache coherence actions required to make a write (including an NVRAM write) visible to other processors, and a ``persist'', the action of writing durably to NVRAM.
+To be able to reason about buffering, I draw a distinction between a ``store'', the cache coherence actions required to make a write (including an NVRAM write) visible to other processors, and a ``persist'', the action of writing durably to NVRAM.
 Buffering permits persists to occur asynchronously.  
 
 Ideally, persist latency is fully hidden and the system executes at native volatile memory speed.
 With finite buffering, performance is ultimately limited by the slower of the average rate that persists are generated (determined by volatile execution rate) and the rate persists complete.
 At best, the longest chain (critical path) of persist ordering constraints determines how quickly persists occur (at worst, constraints within the memory system limit persist rate, such as bank conflicts or bandwidth limitations).
-In defining persistency models, our goal is to admit as much persist concurrency as possible by creating a memory interface that avoids unnecessary constraints.
+In defining persistency models, my goal is to admit as much persist concurrency as possible by creating a memory interface that avoids unnecessary constraints.
 Persistency model implementations might buffer persists in existing store queues and caches or via new mechanisms, such as buffers within NVRAM devices.
 
 \textbf{Persist Coalescing.}
-We expect that NVRAM devices will guarantee atomicity for persists of some size (e.g., eight-byte atomicity \cite{Condit09}).
+I expect that NVRAM devices will guarantee atomicity for persists of some size (e.g., eight-byte atomicity \cite{Condit09}).
 Persists to the same atomically persistable block may coalesce (be performed in a single persist operation) provided no happens-before constraints are violated. 
 Persist coalescing creates an opportunity to avoid frequent persists to the same address, and allows caching/buffering mechanisms to act as bandwidth filters \cite{Goodman83}.
 Coalescing also reduces the total number of NVRAM writes, which may be important for NVRAM devices that are subject to wear.
 Larger atomic persists facilitate greater coalescing.
-Similarly, persistency models that avoid unneccesary ordering constraints allow more coalescing. 
+Similarly, persistency models that avoid unnecessary ordering constraints allow more coalescing. 
 
-While similar gains may be achieved through software (by caching values in nonpersistent memory and precisely controlling when they are persisted), we believe that hardware-enabled persist coalescing is an important feature.
+While similar gains may be achieved through software (by caching values in nonpersistent memory and precisely controlling when they are persisted), I believe that hardware-enabled persist coalescing is an important feature.
 Automatic coalescing relieves the programmer of the burden to manually orchestrate coalescing and specify when persists occur via copies.
 Additionally, automatic coalescing provides backwards compatibility by allowing new devices to increase the size of atomic persists and improve coalescing performance.
-We do not consider specific hardware implementations to detect when persists may coalesce, but assume that it is an important property of high performance persistent memory systems.
+I do not consider specific hardware implementations to detect when persists may coalesce, but assume that it is an important property of high performance persistent memory systems.
 
 \section{Memory Persistency}
 \label{sec:Persistency:Persistency}
