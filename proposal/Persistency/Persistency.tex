@@ -52,6 +52,7 @@ Correct recovery of durable systems requires persists to observe some set of hap
 However, I expect NVRAM writes to be much slower than writes to volatile memory.
 Provided the minimal set of happens-before relations is observed, the gap between volatile execution and NVRAM write performance can be shrunk by optimizations that increase concurrency. 
 I am interested in defining persistency models that create opportunities for two specific optimizations: \emph{persist buffering}, and \emph{persist coalescing}.
+Additionally, I intend to propose persistency models that maximize instruction execution throughput and preserve existing tools, such as atomic synchronization operations.
 
 \textbf{Persist Buffering.}
 Buffering durable writes and allowing thread execution to proceed ahead of persistent state greatly accelerates performance \cite{Condit09}.
@@ -77,6 +78,17 @@ While similar gains may be achieved through software (by caching values in nonpe
 Automatic coalescing relieves the programmer of the burden to manually orchestrate coalescing and specify when persists occur via copies.
 Additionally, automatic coalescing provides backwards compatibility by allowing new devices to increase the size of atomic persists and improve coalescing performance.
 I do not consider specific hardware implementations to detect when persists may coalesce, but assume that it is an important property of high performance persistent memory systems.
+
+\textbf{Minimizing non-persistent overheads.}
+Existing data structures intended for volatile memory must be modified for persistent memory, for example, by adding logging or copy-on-write to make persistent updates atomic after recovery.
+Additionally, new synchronization delays will be introduced with strict persistency if store barriers are inserted to enforce persist order (under strict persistency store barriers are also persist barriers).
+Data structures modified to be recoverable will ultimately run more slowly even on existing volatile memory systems.
+The persistency model will determine how invasive these software transformations are as well as the extent of their performance impact, thus motivating the need to explore the design space of persistency models.
+
+Finally, to minimize the overhead of recoverable software all existing mechanisms of volatile systems must continue to be supported.
+One area that has not yet been investigated is synchronization to persistent memory, including locks, atomic read-modify-write (e.g., add, exchange, test-and-set), and compare-and-swap.
+While this work does not attempt to use these primitives I intend to introduce persistency models that properly define the behavior of these operations with NVRAM.
+Extending existing consistency models provides a framework to define persistent behavior for atomic synchronization primitives.
 
 \section{Memory Persistency}
 \label{sec:Persistency:Persistency}
