@@ -23,7 +23,7 @@ Memory consistency restricts the visible order of loads and stores (equivalently
 Memory consistency models provide an interface and set of memory order guarantees for the programmer, but separate the implementation; several distinct implementations may fulfill the same memory consistency model, allowing sophisticated optimization (e.g., speculation \cite{Blundell09,Wenisch07,Ceze07,Gniady99,Ranganathan97}).
 Relaxing the memory consistency model places an additional burden on the programmer to understand the model and insert the correct annotations, but often allows greater performance.
 
-I introduce \emph{Memory Persistency}, a framework motivated by memory consistency to provide an interface for enforcing the order in which NVRAM writes become durable, an operation we refer to as a ``persist'' (as in previous chapters).
+I introduce \emph{Memory Persistency}, a framework motivated by memory consistency to provide an interface for enforcing the order in which NVRAM writes become durable, an operation refered to as a ``persist'' (as in previous chapters).
 Memory persistency prescribes the order of persist operations with respect to one another and loads and stores, and allows the programmer to reason about guarantees on the ordering of persists with respect to system failures.
 The memory persistency model relies on the underlying memory consistency model and volatile memory execution to define persist ordering constraints and the values written to persistent memory.
 
