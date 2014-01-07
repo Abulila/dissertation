@@ -226,7 +226,58 @@ Strand persistency builds on the hardware requirements to track persist dependen
 In addition to tracking the last thread to access each persistent location, the strand within the thread must also be tracked.
 Unordered persists on different strands can traverse separate queues (e.g., on separate virtual channels) throughout the persistent memory system.
 Strand persistency gives enormous implementation latitude and designing efficient hardware to track and observe only the minimal ordering requirements remains an open research challenge.
-In this work, I focus on demonstrating the potential performance that the model allows. 
+In this work, I focus on demonstrating the potential performance that the model allows.
+
+\section{Related Work}
+\label{sec:PersistencyModels:RelatedWork}
+
+Durable storage has long been used to recover data after failures.
+All systems that use durable storage must specify and honor dependencies between the operations that update that storage.
+For example, file systems must constrain the order of disk operations to metadata to preserve a consistent file system image~\cite{Ganger00,Chidambaram13}, and databases must obey the order of durable storage updates specified in write-ahead logging~\cite{Mohan92}.
+
+Specifying and honoring these dependencies becomes harder when the interface to durable storage are loads and stores to a persistent address space.
+Store instructions to an address space are more frequent and fine grained than update operations when using a block-based interface to durable storage (such as a file system).
+In addition, CPU caches interpose on store instructions, which leads to the interaction of persistency and cache consistency discussed in this thesis.
+
+Recent developments in nonvolatile memory technologies have spurred research on how to use these new technologies.
+Some research projects keep the traditional block-based interface to durable storage and devise ways to accelerate this interface~\cite{Caulfield10}.
+Other projects provide a memory-based interface to durable storage~\cite{Coburn11}.
+My approach follows the path of providing a memory-based interface to durable storage, arguing that the high speed and byte addressability of new nonvolatile memories provides a natural fit with native memory instructions.
+
+Combining a memory interface to durable storage with multiprocessors adds concurrency control issues to those of durability.
+Transactions are a common and powerful paradigm for handling both concurrency control and durability, so many authors have proposed layering transactions on top of nonvolatile memory~\cite{Lowell97,Coburn11,Volos11,Coburn13}.
+Similarly, a recent paper proposes to couple concurrency control with recovery management by committing execution to durable storage at the granularity of the outermost critical section~\cite{Chakrabarti13}.
+
+While transactions and critical sections are powerful mechanisms for concurrency control, many programs use other mechanisms besides these, such as conditional waits.
+Because of this diversity of concurrency control, we believe it is useful to treat the issues of consistency and persistency separately.
+Just as much work has been done to create a framework of memory consistency models~\cite{Adve96}, I seek to begin a framework on memory persistency models.
+
+\textbf{Kiln.}
+Zhao \emph{et al.} recently proposed Kiln, a persistent system using multi-versioning in a persistent cache to provide durable transactions \fixme{cite}.
+A key feature of this system is that persistence control and thread synchronization are de-coupled; persistent transactions do not ensure isolated transactions (I believe it is implied that additional synchronization must already ensure that transactions are isolated).
+Several persistent transactions may occur within a single critical section without the thread synchronization overheads of isolated multi-thread transactions.
+
+In my work I investigate additional interactions between thread communication and persist ordering.
+Kiln provides no mechanism to allow concurrent persists between interacting threads as I do with epoch persistency and strand persistency.
+Zhao introduces ordered and unordered transactions, but it is unclear if ordered transactions are totally ordered between all threads or interact with thread synchronization to establish order, and how to enforce any order with unordered transactions (completely unordered transactions do not provide functionality for useful recovery).
+Finally, as with racing persist epochs, durable transactions that race break transaction atomicity; persists to cache lines that contain conflicting writes from two transactions may reach NVRAM (and be visible at recovery) before or after the transactions commit.
+A precise persistency model must specify how to avoid such behavior or what intended behavior results from persistent transaction races.
+
+\textbf{BPFS.}
+The techniques most closely related to those proposed in this thesis are the primitives for describing persist dependencies in the Byte-Addressable Persistent File System (BPFS)~\cite{Condit09}.
+Condit \emph{et al.} introduce \emph{persist barriers}, similar to existing memory barriers, that constrain the order of writes to the persistent address space.
+Any two persists separated by a barrier must occur in program order, but persists within the same epoch (interval of execution separated by barriers) are concurrent.
+Additionally, Condit assumes that NVRAM allows eight byte atomic writes, allowing many updates to write atomically in-place without additional recovery mechanisms.
+Finally, the proposed cache implementation allows volatile execution of each thread to proceed ahead of the persistent state, although sharing persistent data between threads causes processors to stall.
+I assume similar mechanisms.
+
+I view BPFS as a single point in the memory persistency design space.
+While similar to my epoch persistency design, there are subtle, yet important differences, described in Section~\ref{section:PersistencyModels:PersistEpochs}.
+I highlight complications with the BPFS programming model, specifically persist epoch races.
+Epochs that race and form a cycle may cause the BPFS system to deadlock.
+This problem remains when the access cycle occurs at cache line granularity (false sharing), even if true races do not occur.
+An important aspect of memory persistency is to precisely define allowable behavior under such scenarios.
+I investigate the more-general design space of memory persistency and its interactions with memory consistency.
 
 \section{Conclusion}
 \label{sec:PersistencyModels:Conclusion}
