@@ -101,24 +101,26 @@ Buffered strict persistency can be implemented by serializing persists to a sing
 Delays still occur when buffers fill, to drain the queue at persist sync instructions, or under contention to the persist queue.
 
 More advanced implementations might consider distributed queues (i.e., one queue per thread/core) or extensions to the existing cache system.
-Mechanisms must be introduced to ensure that persists of each thread occur in program order and that persists are ordered by conflicting accesses from different threads.
+Mechanisms must be introduced to ensure that persists of each thread occur in program order and that persists are ordered by conflicting accesses from different threads, but persists from several threads may occur concurrently (they are not serialized) while persists buffer and execution proceeds ahead of persistent state.
 Under the definition of SC such implementations must detect load-before-store races between threads, ordering persists prior to the load (on the first thread) before persists after the store (on the second thread).
 A single store may introduce persist ordering constraints with many threads, each having loaded data from the store's address.
-It is unclear how to design a system that satisfies these constraints.
+It is unclear how to design a system that satisfies these constraints without frequent delays.
 
 While insufficient for SC, TSO might be implemented by recording a ``persist counter" and thread in each cache line.
-Each time a thread persists it increments its persist counter, and each store (including persists) writes the thread and persist counter into the cache line.
+Each time a thread persists it increments its persist counter, and each store (including volatile stores and persists) writes the thread and persist counter into the cache line.
 Persists drain in program order by maintaining a persist queue per thread/core.
-Persist order between threads is enforced at each load and store by observing the previously recorded thread and counter at each load and store---all subsequent stores from the executing thread must occur after the last persist to the cache line.
+Persist order between threads is enforced at each load and store by observing the previously recorded thread and counter in the operation's cache line---all subsequent stores from the executing thread must occur after the last persist to the cache line.
 These inter-thread persist constraints may be recorded in threads' queues or by delaying immediately until the other thread's queue drains.
 Such a system resembles BPFS (discussed later in Section~\fixme{1} and Section~\fixme{2}) where each persist occurs in its own epoch \cite{Condit09}.
 
-More likely, implementations of strict persistency under SC will use in-hardware NVRAM logs or copy-on-write and indirection to give the appearance of SC while persists occur concurrently.
-Such implementations must still detect memory conflicts between threads (including load-before-store conflicts).
-An intriguing possibility would be to leverage existing hardware transactional memories (HTM), partitioning program order into transactions that enforce atomicity, isolation, and durability---resembling persistent BulkSC \fixme{cite}.
+Strict persistency under SC may also be implemented using in-hardware NVRAM logs or copy-on-write and indirection to give the appearance of SC while persists occur concurrently.
+Hardware must ensure both that persists do not occur out of program order for any thread and that conflicting accesses properly enforce persist order across threads.
+An intriguing possibility would be to leverage existing hardware transactional memories (HTM), partitioning program execution into transactions that enforce atomicity, isolation, and durability---resembling BulkSC with durable transactions \fixme{cite}.
 Transactions must be long enough to minimize transaction overhead (including persist barriers for each durable transaction) and improve persist concurrency (by placing many persists in the same transaction), but short enough to bound resources necessary for atomic transactions and to minimize forward progress lost when a transaction aborts.
+Additionally, transactions may buffer persists so long as transactions become visible to recovery in their proper order.
+I leave it to future work to investigate how to coalesce persists between durable transactions.
 
-\subsection{Persist Epochs}
+\subsection{Epoch Persistency}
 \label{section:PersistencyModels:PersistEpochs}
 
 \textbf{Motivation.}
@@ -126,9 +128,9 @@ Strict persistency under SC introduces many persist dependences unnecessary for 
 The most common unnecessary persist dependence occurs due to the program-order constraint of SC.
 Programs frequently persist to large, contiguous regions of memory that logically represents a single object, but which cannot occur atomically (due to their size).
 Under strict persistency, the persists serialize.
-I remove the program-order-implied persist order constraint with \emph{persist epochs}, allowing consecutive persists from the same thread to reorder and persist in parallel.
-Doing so, however, requires annotation by the programmer in the form of persist barriers when ordering is required by the recovery algorithm.
-Persist epochs additionally allow persists to addresses protected by a lock to reorder with respect to the lock operations (e.g., avoid delaying the lock release while the persist completes); my queue implementations leverage this optimization opportunity as well.
+I remove the program-order-implied persist order constraint with \emph{epoch persistency}, allowing consecutive persists from the same thread to reorder and persist in parallel.
+Doing so, however, requires annotation by the programmer in the form of persist barriers to divide execution into epochs when ordering is required by the recovery algorithm.
+Epoch persistency additionally allows persists to addresses protected by a lock to reorder with respect to the lock operations (e.g., avoid delaying the lock release while the persist completes); my queue implementations leverage this optimization opportunity.
 
 \textbf{Definition.}
 Each thread's execution is separated into \emph{persist epochs} by persist barrier instructions.
@@ -143,13 +145,13 @@ As a consequence, persists prior to the persist barrier immediately preceding th
 However, persists within the epochs participating in the persist epoch race are concurrent and may complete in parallel or out of order.
 
 \textbf{Discussion.}
-Barriers provide an intuitive mechanism to guarantee proper recovery as it is impossible at recovery to observe a persist from after a barrier while failing to observe a persist from before the same barrier.
+Epoch persistency provides an intuitive mechanism to guarantee proper recovery as it is impossible at recovery to observe a persist from after a barrier while failing to observe a persist from before the same barrier.
 However, many persists (those within the same epoch) are free to occur in parallel, improving persist concurrency.
 
 As noted in the definition, reasoning about persist order across threads can be challenging.
 Synchronization operations within persist epochs impose ordering across the store and load operations (due to SC memory ordering), but do not order corresponding persist operations.
 Hence, persist operations correctly synchronized under SC by volatile locks may nevertheless result in astonishing persist ordering.
-A simple (yet conservative) way to avoid persist epoch races is to place persist barriers before and after all lock acquires and releases.
+A simple (yet conservative) way to avoid persist epoch races is to place persist barriers before and after all lock acquires and releases, and to only place locks in the volatile address space.
 The persist behavior of strict persistency can be achieved by preceding and following all persists with a persist barrier.
 
 Persist epoch races may be intentionally introduced to increase persist concurrency; I discuss such an optimization below.
@@ -158,8 +160,8 @@ However, synchronization through persistent memory is possible.
 Since persists to the same address must follow the order observed by cache coherence, even if they occur in epochs that race, the outcome of persist synchronization is well defined.
 Hence, atomic read-modify-write operations to persistent memory addresses provide the expected behavior.
 
-My definition of persist epochs is inspired by the programming model and hardware extensions for caching persisent memory proposed for the Byte-addressable Persistent File System (BPFS) \cite{Condit09}.
-However, I introduce several subtle differences that I believe make persist epochs a more intuitive model.
+My definition of epoch persistency is inspired by the programming model and hardware extensions for caching persisent memory proposed for the Byte-addressable Persistent File System (BPFS) \cite{Condit09}.
+However, I introduce several subtle differences that I believe make epoch persistency a more intuitive model.
 My definition considers all memory accesses when determining persist ordering among threads, whereas the BPFS memory system orders persists only when conflicts occur to the persistent address space.
 While the BPFS file system implementation avoids persist epoch races, it is not clear that the burden falls to the programmer to avoid such accesses or what persist behavior results when such races occur (we believe the BPFS authors' intent was to prohibit programs containing such races---the cache implementation deadlocks under persist epoch races containing circular persist dependences).  
 Furthermore, BPFS detects conflicts to the persistent address space by recording the last thread and epoch to persist to each cache line; the next thread to access that line will detect the conflict.
@@ -167,60 +169,67 @@ Such an implementation, however, cannot detect conflicts where the first access 
 As a result, BPFS detects conflicts to persistent memory according to TSO rather than SC ordering \cite{SPARCv9}.
 
 \textbf{Persist Performance.}
-Persist epochs remove all unnecessary persist dependences that result from strict persistency's program order constraint.
+Epoch persistency removes all unnecessary persist dependences that result from strict persistency's program order constraint.
 All versions of the persistent queue benefit from allowing persist entries to persist to the data segment concurrently, regardless of the size of the entry.
 Additionally, \emph{Queue Holes} allows entry length and \emph{endBit} to persist concurrently (although both are ordered with respect to the subsequent persist of the head pointer).
 Finally, many persist constraints between threads are removed by intentionally allowing persist epoch races.
+Lock operations occur in the same epoch as the first persists of the insert operation, while unlock operations occur in the same barrier as the last persists; persists from the the last epoch of an insert and the first epoch of the subsequent insert are concurrent.
 \emph{Copy While Locked} and \emph{Queue Holes} retain recovery correctness by still ordering all persists to the head marker (persists will occur according to cache coherence order).
 As a result, persists protected by a lock now occur concurrently.
 
-Algorithm~\ref{Alg::Queue} demonstrates how to use persist barriers (shown in the code as $PersistBarrier$) within our queue designs.
-The constraints in Figures~\ref{fig::CWL_dependences} and~\ref{fig::holes_dependences} annotated with ``A" are removed under persist epochs relative to strict persistency.
+Algorithm~\ref{Alg::Queue} demonstrates how to use epoch persistency's barriers (shown in the code as $PersistBarrier$) within our queue designs.
+The constraints in Figures~\ref{fig::CWL_dependences} and~\ref{fig::holes_dependences} annotated with ``A" are removed under epoch persistency relative to strict persistency.
 
 \textbf{Implementation.}
 BPFS \cite{Condit09} outlines cache extensions that provide a persistency model similar to persist epochs, assuming the TSO consistency model.
-Modifications must be made to detect load-before-store conflicts (and thus enforce SC rather than TSO ordering) and track conflicts to volatile memory addresses as well as persistent memory addresses; detecting load-before-store conflicts without frequent delays remains an open problem.
+Modifications must be made to detect load-before-store conflicts (and thus enforce SC rather than TSO ordering) and track conflicts to volatile memory addresses as well as persistent memory addresses; detecting load-before-store conflicts and enforcing persist order without frequent delays remains an open problem.
 Instead of delaying execution to enforce persist ordering among threads, optimized implementations avoid stalling execution by buffering persists while recording and subsequently enforcing dependences among them, allowing persists to occur asynchronously despite access conflicts.
 
 More advanced techniques might rely on hardware NVRAM logging and hardware transactional memory, partitioning program execution into transactions as discussed above for strict persistency.
-Under persist epochs, once it is known that a transaction will not abort due to conflicts, persists from the first epoch of a transaction need not persist atomically or in any order (subsequent epochs must continue to log).
-This implies that transactions must only persist atomically if the transaction contains persists from multiple epochs, otherwise the order of persists must only be enforced between persists of different transactions.
-Persist barriers might be used as hints to establish transaction boundaries and minimize durable transaction logging.
+Under epoch persistency any transaction that contains only a single epoch need not persist atomically, and therefore logging is unnecessary (persist order must still be enforced between transactions).
+Persist barriers may be used as hints to establish transaction boundaries and minimize durable transaction logging.
 
-\subsection{Persist Strands}
+\subsection{Strand Persistency}
 \label{section:PersistencyModels:PersistStrands}
 
 \textbf{Motivation.}
-Persist epochs relax persist dependences within and across threads.
-However, persists within a thread can only be labeled as concurrent if they are consecutive.
+Epoch persistency relaxes persist dependences within and across threads.
+However, only consecutive persists within a thread may be labeled as concurrent.
 Likewise, persists from different threads are only concurrent if their epochs race or if they are not synchronized.
 Many persists within and across threads may still correctly be made concurrent even if they do not fit these patterns.
-We introduce \emph{persist strands}, a new persistency model to minimally annotate persist dependences.
+I introduce \emph{strand persistency}, a new model to minimally annotate persist dependences.
 
 \textbf{Definition.}
 A strand is an interval of memory execution from a single thread.
 Strands are separated via \emph{strand barriers}; each strand barrier begins a new strand.
 The strand barrier clears all previously observed persist dependences from the executing thread.
-Within each strand new and observed persists are ordered using persist barriers according to the persist epoch model.
+Within each strand new and observed persists are ordered using persist barriers according to the epoch persistency model.
 
 \textbf{Discussion.}
 There are no implicit persist ordering constraints across strands for persists to different addresses on the same thread of execution.
 Ordering constraints arise only for persists to the same address as implied by cache coherence.
 Hence, persists on a new strand may occur as early as possible and overlap with all preceding persists.
-Persist strands allow programmers to indicate that logical tasks on the same thread are independent from the perspective of persistency.
+Strand persistency allows programmers to indicate that logical tasks on the same thread are independent from the perspective of persistency.
 To enforce necessary ordering, a persist strand begins by reading any memory locations after which new persists must be ordered.
-These reads introduce an ordering dependency due to cache coherence, which can then be enforced with a subsequent epoch barrier.
-This programming interface allows ordering constraints to be specified at the granularity of individual addresses.
+These reads introduce an ordering dependency due to cache coherence, which can then be enforced with a subsequent persist barrier.
+This programming interface allows ordering constraints to be specified at the granularity of individual addresses; the minimal set of persist dependences is achieved by placing each persist in its own strand, loading all addresses the persist must depend on, inserting a persist barrier, and then executing the persist.
 
 \textbf{Persist Performance.}
 Our persistent queue implementations place each insert task in a separate persist strand.
 The result is that all unnecessary persist constraints are removed, including constraints between inserts from the same thread.
-Algorithm~\ref{Alg::Queue} includes the necessary persist strand annotations ($NewStrand$ and $PersistBarrier$).
-All unnecessary constraints from Figures~\ref{fig::CWL_dependences} and~\ref{fig::holes_dependences} are removed; those removed in moving from persist epochs to persist strands are labeled ``B."
+Algorithm~\ref{Alg::Queue} includes the necessary strand persistency annotations ($NewStrand$ and $PersistBarrier$).
+All unnecessary constraints from Figures~\ref{fig::CWL_dependences} and~\ref{fig::holes_dependences} are removed; those removed in moving from epoch persistency to strand persistency are labeled ``B."
 The required persist dependences (and only those required for correct recovery) remain, maximizing persist concurrency.
 
 \textbf{Implementation.}
-Persist strands build on the hardware requirements to track persist dependencies as in persist epochs, but further require mechanisms to separate tracking of dependencies for different strands.  In addition to tracking the last thread to access each persistent location, the strand within the thread must also be tracked.  Unordered persists on different strands can traverse separate queues (e.g., on separate virtual channels) throughout the persistent memory system.  Persist strands give enormous implementation latitude and designing efficient hardware to track and observe only the minimal ordering requirements remains an open research challenge.  In this work, we focus on demonstrating the potential performance that the model allows. 
+Strand persistency builds on the hardware requirements to track persist dependencies as in persist epochs, but further require mechanisms to separate tracking of dependencies for different strands.
+In addition to tracking the last thread to access each persistent location, the strand within the thread must also be tracked.
+Unordered persists on different strands can traverse separate queues (e.g., on separate virtual channels) throughout the persistent memory system.
+Persist strands give enormous implementation latitude and designing efficient hardware to track and observe only the minimal ordering requirements remains an open research challenge.
+In this work, I focus on demonstrating the potential performance that the model allows. 
+
+\section{Conclusion}
+\label{sec:PersistencyModels:Conclusion}
 
 Relaxed persistency offers new tools to enforce recovery correctness while minimizing delays due to persists.
-The next sections use these queue software designs and persistency models to quantitatively evaluate how much opportunity relaxed persistency holds to improve performance with NVRAM.
+In the next chapter I use these queue designs and persistency models to quantitatively evaluate the opportunity relaxed persistency holds to improve performance with NVRAM.

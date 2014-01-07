@@ -1,5 +1,5 @@
 \begin{algorithm}
-  \caption{Psuedo-code for Insert operations.  We include the annotations required by our relaxed persistency models, discussed in Section~\ref{section:PersistencyModels}.  $PersistBarrier$ applies to epoch persistency and persist strands, $NewStrand$ applies only to persist strands.}
+  \caption{Psuedo-code for insert operations.  I include the annotations required by relaxed persistency models, discussed in Section~\ref{section:PersistencyModels}.  $PersistBarrier$ applies to epoch persistency and strand persistency, $NewStrand$ applies only to strand persistency.}
   \label{Alg::Queue}
   \begin{algorithmic}[1]
   \Require $head$ is a persistent pointer, $data$ a persistent array.
