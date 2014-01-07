@@ -222,10 +222,10 @@ All unnecessary constraints from Figures~\ref{fig::CWL_dependences} and~\ref{fig
 The required persist dependences (and only those required for correct recovery) remain, maximizing persist concurrency.
 
 \textbf{Implementation.}
-Strand persistency builds on the hardware requirements to track persist dependencies as in persist epochs, but further require mechanisms to separate tracking of dependencies for different strands.
+Strand persistency builds on the hardware requirements to track persist dependencies as in epoch persistency, but further requires mechanisms to separate tracking of dependencies for different strands.
 In addition to tracking the last thread to access each persistent location, the strand within the thread must also be tracked.
 Unordered persists on different strands can traverse separate queues (e.g., on separate virtual channels) throughout the persistent memory system.
-Persist strands give enormous implementation latitude and designing efficient hardware to track and observe only the minimal ordering requirements remains an open research challenge.
+Strand persistency gives enormous implementation latitude and designing efficient hardware to track and observe only the minimal ordering requirements remains an open research challenge.
 In this work, I focus on demonstrating the potential performance that the model allows. 
 
 \section{Conclusion}
