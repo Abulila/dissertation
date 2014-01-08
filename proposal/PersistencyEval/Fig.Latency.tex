@@ -4,6 +4,6 @@
   %\qquad
   %\subfloat[\textbf{8 Threads.}]{\includegraphics[width=\linewidth]{graphs/Latency8Threads.pdf}}
   \includegraphics[width=.55\linewidth]{PersistencyEval/Latency1Thread.pdf}
-  \caption{\textbf{Persistency Model Performance vs Persist Latency.} \emph{Copy While Locked}, 1 thread.  At low persist latency all persistency models compute-bound (horizontal line formed at top).  As persist latency increases each persistency model becomes persist-bound and thereafter throughput degrades.  Relaxed persistency models are resilient to large persist latency.}
+  \caption{\textbf{Persist Latency.} \emph{Copy While Locked}, 1 thread.  All models initially compute-bound (line at top).  As persist latency increases each model becomes persist-bound.  Relaxed models are resilient to large persist latency.}
   \label{fig::RelaxedPerformance}
 \end{figure}

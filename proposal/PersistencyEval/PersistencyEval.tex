@@ -1,60 +1,58 @@
-The previous two chapter described a recoverable persistent queue data structure as well as three memory persistency model.
+The previous two chapter described a recoverable persistent queue data structure as well as three memory persistency models.
 This chapter uses the queue and models to motivate the need for relaxed memory persistency models.
 First, I describe the methodology used for this evaluation.
 
 \section{Methodology}
 \label{sec:PersistencyEval:Methodology}
 
-We evaluate the persistent queue designs and persistency models introduced in Section~\ref{section:Queue} to measure the opportunity for relaxed persistency models to improve persist performance.
-To this end we measure instruction execution rate on a real server and persist concurrency via memory traces.
-This section outlines our methodology for these experiments.
-
+To evaluate persistent queue designs and persistency models I measure instruction execution rate on a real server and persist concurrency via memory traces.
 All experiments run the queue benchmarks optimized for volatile performance.
 Memory padding is inserted to objects and queue inserts to provide 64-byte alignment to prevent false sharing.
 %All threads are constrained to a single socket using the Linux \emph{taskset} utility.
 Critical sections are implemented using MCS locks \cite{Mellor-Crummey91}, a high-throughput queue based lock.
-Experiments insert 100 byte queue entries.
+Experiments insert 100-byte queue entries.
 %Once the queue fills a thread flash-clears the queue by copying the entire valid portion of the data segment at once and updating the circular buffer tail pointer, simulating an archive process.
 %Archiving in this manner minimizes interference between archive threads and inserting threads that would otherwise increase lock contention increase persist ordering constrain critical path.
 Instruction execution rate is measured as inserts per second while inserting 100,000,000 entries between all threads using an Intel Xeon E5645 processor (2.4GHz).
-The remainder of this section describes how we measure persist concurrency for the queue benchmarks.
+The remainder of this section describes how I measure persist concurrency for the queue benchmarks.
 
 \textbf{Persist Ordering Constraint Critical Path.}
-Instead of proposing specific hardware designs and using architectural simulation, we instead measure, via memory traces, the persist ordering constraint critical path.
-Our evaluation assumes a memory system with infinite bandwidth and memory banks (so bank conflicts never occur), but with finite persist latency.
+Instead of proposing specific hardware designs and using architectural simulation, I instead measure, via memory traces, the persist ordering constraint critical path.
+The evaluation assumes a memory system with infinite bandwidth and memory banks (so bank conflicts never occur), but with finite persist latency.
 Thus, persist throughput is limited by the longest chain (critical path) of persist ordering constraints observed by execution under different memory persistency models.
 While real memory systems must necessarily delay elsewhere due to limited bandwidth, bank conflicts, and other memory-related delays incurred in the processor, measuring persist ordering constraint critical path offers an implementation-independent measure of persist concurrency.
 
 %Measuring persist critical path still requires several assumptions about the memory system.
-We measure persist critical path under the following assumptions.
+I measure persist critical path under the following assumptions.
 Every persist to the persistent address space occurs in place (there is no hardware support for logging or indirection to allow concurrent persists).
-We track persist dependences at a variable granularity (e.g., eight-byte words or 64-byte cache lines).
+I track persist dependences at variable granularity (e.g., eight-byte words or 64-byte cache lines).
 Coarse-grained persist tracking is susceptible to false sharing, introducing unnecessary persist ordering constraints due to accesses to the same cache line but not to overlapping addresses.
-We similarly track persist coalescing with variable granularity.
+I similarly track persist coalescing with variable granularity.
 Every persist attempts to coalesce with the last persist to that address.
 A persist successfully coalesces if the persist fits within an atomically persistable memory block and coalescing with the previous persist to the same block does not violate any persist order constraints.
 %Both persist dependence tracking and coalescing occurs within aligned blocks of memory.
 %Using these assumptions, we generate memory access traces and simulate persist timing to determine persist ordering constraint critical path.
 
 \textbf{Memory Trace Generation.}
-We use PIN to instrument the queue benchmarks and generate memory access traces \cite{LukCohn05}.
+I use PIN to instrument the queue benchmarks and generate memory access traces \cite{LukCohn05}.
 Tracing multi-threaded applications requires additional work to ensure analysis-atomicity---application instructions and corresponding instrumentation instructions must occur atomically, otherwise the traced memory order will not accurately reflect execution's memory order.
-We provide analysis atomicity by creating a bank of locks and assigning every memory address (or block of addresses) to each lock.
+I provide analysis atomicity by creating a bank of locks and assigning every memory address (or block of addresses) to a lock.
 Each instruction holds all locks corresponding to its memory operands while being traced.
 %Locks are numbered and acquired in lock number-order to avoid deadlocks.
 %In addition to tracing memory accesses, we instrument the queue benchmarks with region-of-interest markers, persist barriers, and persistent malloc/free to distinguish persistent and volatile address spaces.
 %Each annotation is implemented as a standard function and instrumented in PIN.
-In addition to tracing memory accesses, we instrument the queue benchmarks with persist barriers and persistent malloc/free to distinguish and persistent volatile address spaces.
+In addition to tracing memory accesses, I instrument the queue benchmarks with persist barriers and persistent malloc/free to distinguish volatile and persistent address spaces.
+My tracing infastructure is available to the public \fixme{cite}.
 
 Tracing memory accesses in such a way ensures that the trace accurately reflects the order of memory accesses from execution.
 %However, as only one instruction from any thread can access each memory region at once, and instructions on each thread occur in program order, our trace is limited to SC.
-As only one instruction from any thread can access each address at once, and instructions on each thread occur in program order, our trace provides SC.
-Thus, our memory persistency models assume SC as the underlying consistency model.
+As only one instruction from any thread can access each address at once, and instructions on each thread occur in program order, the trace observes SC.
+Thus, all evaluated memory persistency models assume SC as the underlying consistency model.
 
 \textbf{Performance Validation.}
-It is important that our tracing not heavily influence thread interleaving, which would affect persist concurrency.
-We measure the distance of insert operations between successive inserts from the same thread.
-We observe that the distribution of insert distance is the same when running each queue natively and with instrumentation enabled, suggesting that thread interleaving has not been significantly affected.
+It is important that tracing not heavily influence thread interleaving, which would affect persist concurrency.
+I measure the distance of insert operations between successive inserts from the same thread.
+I observe that the distribution of insert distance is the same when running each queue natively and with instrumentation enabled, suggesting that thread interleaving is not significantly affected.
 
 \textbf{Persist Timing Simulation.}
 %Using the memory trace we measure persist ordering constraint critical path as the time of the last persist from any thread.
@@ -63,49 +61,49 @@ For example, under strict persistency each persist occurs after or coalesces wit
 Persists' ability to coalesce is similarly propagated through memory and thread state to determine when coalescing will violate persist ordering constraints.
 The persistency models differ as to the events that propagate persist ordering constraints through memory and threads.
 
-We use this methodology to establish a need for relaxed persistency models, as well as measure their opportunity to accelerate recoverable systems.
+Next, I use this methodology to establish the need for relaxed persistency models, as well as measure their opportunity to accelerate recoverable systems.
 
 \section{Evaluation}
 \label{sec:PersistencyEval:Evaluation}
 
-In this section we use the previously described methodology to demonstrate that persist ordering constraints present a performance bottleneck under strict persistency.
+This section uses the previously described methodology to demonstrate that persist ordering constraints present a performance bottleneck under strict persistency.
 However, relaxed persistency improves persist concurrency, removing stalls caused by persists.
-We also show that relaxed persistency models are resilient to large persist latency, allowing maximum throughput as persist latency increases.
-Finally, we consider the effects of larger atomic persists and coarse-grained persist dependence tracking. 
+I also show that relaxed persistency models are resilient to large persist latency, allowing maximum throughput as persist latency increases.
+Finally, I consider the effects of larger atomic persists and coarse-grained persist dependence tracking. 
 
 \subsection{Relaxed Persistency Performance}
 \label{section:Evaluation:PersistencyPerformance}
 
 NVRAM persists are only a concern if they slow down execution relative to non-recoverable systems.
 If few enough persists occur, or those persists are sufficiently concurrent, performance remains bounded by the rate that instructions execute with few delays caused by persists.
-To determine system performance, we assume that only one of the instruction execution rate and persist rate is the bottleneck: either the system executes at its instruction execution rate (measured on current hardware), or throughput is limited solely by persist rate (while observing persist dependencies and retaining recovery correctness).
+To determine system performance, I assume that only one of the instruction execution rate and persist rate is the bottleneck: either the system executes at its instruction execution rate (measured on current hardware), or throughput is limited solely by persist rate (while observing persist dependencies and retaining recovery correctness).
 
 \input{PersistencyEval/NormalizedPerformance}
 
-Table~\ref{table::RelaxedPerformance} shows the achievable throughput for our queue microbenchmarks and persistency models for both one and eight threads assuming 500ns persists.
+Table~\ref{table::RelaxedPerformance} shows the achievable throughput for the queue microbenchmarks and persistency models for both one and eight threads assuming 500ns persists.
 Rates are normalized to instruction execution---normalized rates above one (bold) admit sufficient persist concurrency to achieve the instruction execution rate while normalized rates below one are limited by persists.
 Instruction execution rates vary between log version and number of threads (not shown).
 
-Strict persistency, our most conservative model, falls well below instruction execution rate, suggesting that memory systems with such restrictive models will be persist-bound.
+Strict persistency, the most conservative model, falls well below instruction execution rate, suggesting that memory systems with such restrictive models will be persist-bound.
 \emph{Copy While Locked} with one thread suffers nearly a 30$\times$ slowdown; over-constraining persist order greatly limits workload throughput.
 %The leftmost bar represents strict persistency with SC, our most conservative model.
 %The achievable throughput for this model sits well below the instruction execution rate, suggesting that a memory system using such restrictive models will be persist-bound.
 %\emph{Copy While Locked} with one thread sees a 30$\times$ slowdown relative to instruction execution rate; over-constraining persist order greatly limits workload throughput.
 
 Relaxing persistency improves throughput for persist-bound configurations.
-Persist epochs improve persist concurrency by allowing entire queue entries to persist concurrently and removes a number of unnecessary persist constraints via intentional persist epoch races.
+Epoch persistency improves persist concurrency by allowing entire queue entries to persist concurrently and removes a number of unnecessary persist constraints via intentional persist epoch races.
 All queue designs see a substantial increase in throughput, with the eight thread configurations achieving instruction execution rate.
 At the same time, the one thread configurations remain persist-bound and their throughput suffers relative to a nonrecoverable system.
 Nevertheless, \emph{Copy While Locked} with one thread is now only $5.9\times$ slower than the instruction execution rate.
 
 While execution for all queue designs with many threads is already compute bound and does not benefit from further relaxing persistency, the single thread configurations require additional persist concurrency to improve performance.
-Persist strands allow concurrent persists from the same thread while still ensuring correct recovery.
+Strand persistency allows concurrent persists from the same thread while still ensuring correct recovery.
 This model enables incredibly high persist concurrency such that all log versions are compute-bound even for a single thread.
-Sufficiently relaxed persistency models allow data structures and systems that recover from failure while retaining the throughput of traditional main-memory data structures.
+Sufficiently relaxed persistency models allow data structures and systems that recover from failure while retaining the throughput of existing main-memory data structures.
 
 \textbf{Persist Latency.}
-The previous results argue why relaxed persistency models are necessary for large persist latency.
-However, for fast enough technologies additional persist concurrency is unnecessary to achieve instruction execution rate.
+The previous results argue for relaxed persistency models under large persist latency.
+However, for fast enough NVRAM technologies additional persist concurrency is unnecessary to achieve instruction execution rate.
 Figure~\ref{fig::PersistLatency} shows the achievable execution rate (limited either by persist rate or instruction execution rate) for \emph{Copy While Locked} with one thread.
 The x-axis shows persist latency on a logarithmic scale, ranging from 10ns to 100\textmu s.
 
@@ -115,9 +113,9 @@ The x-axis shows persist latency on a logarithmic scale, ranging from 10ns to 10
 At low persist latency all persistency models achieve instruction execution rate (horizontal line formed at the top).
 However, as persist latency increases each model eventually becomes persist-bound and throughput quickly degrades.
 Strict persistency becomes persist-bound at only 17ns.
-Persist epochs allow more persist concurrency---instruction execution rate and persist rate break even at 119ns.
+Epoch persistency improves persist concurrency---instruction execution rate and persist rate break even at 119ns.
 While this is a great improvement we expect most NVRAM technologies to exhibit higher persist latency.
-Finally, persist strands offer sufficient persist concurrency to become persist-bound only above 6us.
+Finally, strand persistency offers sufficient persist concurrency to become persist-bound only above 6us.
 
 In all cases throughput quickly decreases once execution is persist-bound as persist latency continues to increase.
 Persists limit the most conservative persistency models even at DRAM-like write latencies.
@@ -226,46 +224,47 @@ However, relaxed persistency models are resilient to large persist latencies and
 \subsection{Atomic Persist and Tracking Granularity}
 \label{section:Evaluation:Granularity}
 
-The previous experiments considered performance for queue designs and persistency models assuming that persist ordering constraints propagate through memory at eight-byte granularity (i.e., a race to addresses in the same eight-byte, aligned memory block introduces a persist ordering constraint according to the persistency model).
-Additionally, we assume that persists occur atomically to eight-byte, aligned memory blocks.
-Both of these may vary in real implementations; we measure their effect on persist ordering constraint critical path.
+The previous experiments consider performance for queue designs and persistency models assuming that persist ordering constraints propagate through memory at eight-byte granularity (i.e., a race to addresses in the same eight-byte, aligned memory block introduces a persist ordering constraint according to the persistency model).
+Additionally, experiments assume that persists occur atomically to eight-byte, aligned memory blocks.
+Both of these may vary in real implementations; I measure their effect on persist ordering constraint critical path.
 
 \textbf{Atomic Persist Granularity.}
 Atomic persist granularity is an important factor for persist concurrency and performance.
-As in \cite{Condit09} we assume NVRAM persists atomically to at least eight-byte (pointer-sized) blocks of memory (a persist to an eight byte, aligned memory block will always have occurred or not after failure; there is no possibility of a partial persist).
-However, we recognize that larger atomic persist granularity creates opportunity for additional persist coalescing.
+As in \cite{Condit09} I assume NVRAM persists atomically to at least eight-byte (pointer-sized) blocks of memory (a persist to an eight byte, aligned memory block will always have occurred or not after failure; there is no possibility of a partial persist).
+However, increasing atomic persist granularity creates opportunities for additional persist coalescing.
 Nearby or adjacent persists may occur atomically and coalesce so long as no persist dependences are violated.
 %For example, consider two ordered persists to adjacent eight-byte objects.
 %With eight byte atomic persists these two persists occur one ordered after the other, but with 16 byte atomic persists the two occur atomically together.
-If the original ordering between the two persist operations appeared on the persist dependence critical path we have just decreased the critical path and reduced the likelihood of delay due to persists.
+If the originally enforced ordering between two persist operations appeared on the persist dependence critical path, coalescing due to increased atomic persist granularity may decrease the critical path and reduce the likelihood of delay due to persists.
 
  \input{PersistencyEval/Fig.Coalescing}
 
-Figure~\ref{fig::Coalescing} displays average persist ordering critical path per insert for \emph{Copy While Locked} and \emph{Queue Holes} for both strict persistency and persist epochs as atomic persist size increases from eight to 512 bytes.
-At eight byte persists there is a large separation between strict persistency and persist epochs.
-As atomic persist size increases the persist critical path of strict persistency steadily decreases while the critical path of persist epochs remains largely unchanged.
-At 512 byte atomic persists (right of the Figure) strict persistency matches persist epochs.
-For our queue microbenchmarks larger atomic persists provide the same improvement to persist critical path as relaxed persistency, but offer no improvement to relaxed models.
+Figure~\ref{fig::Coalescing} displays average persist ordering critical path per insert for \emph{Copy While Locked} and \emph{Queue Holes} for both strict persistency and epoch persistency as atomic persist size increases from eight to 512 bytes.
+At eight-byte persists there is a large separation between strict persistency and epoch persistency.
+As atomic persist size increases the persist critical path of strict persistency steadily decreases while the critical path of epoch persistency remains largely unchanged.
+At 512-byte atomic persists (right of the Figure) strict persistency matches epoch persistency.
+For these queue microbenchmarks larger atomic persists provide the same improvement to persist critical path as relaxed persistency, but offer no improvement to relaxed models.
 Increasing atomic persist granularity offers an alternative to relaxed persistency models.
 
 \textbf{Persist False Sharing.}
-Just as in existing memory systems, persists degrade performance due to false sharing.
-False sharing in traditional systems occurs when contention to the same cache line occurs even though different threads are accessing disjoint addresses in that cache line.
+Just as in existing memory systems, persists suffer from false sharing, degrading performance.
+False sharing traditionally occurs under contention to the same cache line even though threads access disjoint addresses in that cache line.
 Similarly, \emph{persistent false sharing} occurs when a persist ordering constraint is unnecessarily introduced due to the coarseness at which races are observed.
 Persistent false sharing occurs in races to both persistent and volatile memory, as races to both address spaces establish persist ordering constraints.
 
  \input{PersistencyEval/Fig.FalseSharing}
 
-Figure~\ref{fig::FalseSharing} shows average persist critical path per insert for \emph{Copy While Locked} and \emph{Queue Holes} for both strict and persist epochs as the granularity at which persist ordering constraints propagate increases.
-For fine-grained tracking persist epochs provides far lower persist critical path than strict persistency.
-As tracking granularity increases, strict persistency performance remains the same while persist epochs decreases (critical path increases).
-At 512 byte tracking granularity strict and persist epochs provide comparable persist critical path; many of the persist constraints removed by relaxing consistency are reintroduced through false sharing.
+Figure~\ref{fig::FalseSharing} shows average persist critical path per insert for \emph{Copy While Locked} and \emph{Queue Holes} for both strict persistency and epoch persistency as the granularity at which persist ordering constraints propagate increases.
+For fine-grained tracking epoch persistency provides a far lower persist critical path than strict persistency.
+As tracking granularity increases, strict persistency performance remains the same while epoch persistency decreases (critical path increases).
+At 512-byte tracking granularity strict persistency and epoch persistency provide comparable persist critical paths; many of the persist constraints removed by relaxing consistency are reintroduced through false sharing.
 
 \section{Conclusion}
 \label{sec:PersistencyEval:Conclusion}
 
 Future NVRAM technologies offer the performance of DRAM with the durability of disk.
-However, existing memory interfaces are incapable of leveraging this performance while simultaneously enforcing proper data recovery.
-In previous chapters I introduced \emph{memory persistency}, an extension of memory consistency that allows programmers to describe persist order constraints.
-Additionally, I outlined the design space of possible memory persistency models and detailed three persisteny models and their use in implementing a persistent queue.
+However, existing memory interfaces are incapable of guaranteeing proper data recovery by properly enforcing persist order.
+In previous chapters I introduced \emph{memory persistency}, an extension to memory consistency that allows programmers to describe persist order constraints.
+Additionally, I outlined the design space of possible memory persistency models and detailed three persistency models and their use in implementing a persistent queue.
 In this chapter I used memory tracing and simulation to demonstrate that strict persistency models suffer a 30$\times$ slowdown relative to instruction execution rate, and that relaxed persistency effectively regains this performance.
+Memory persistency represents a framework for defining programmer interfaces for NVRAM and reasoning about program correctness for recoverable applications.
