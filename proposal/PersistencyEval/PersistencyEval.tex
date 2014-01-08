@@ -259,6 +259,36 @@ For fine-grained tracking epoch persistency provides a far lower persist critica
 As tracking granularity increases, strict persistency performance remains the same while epoch persistency decreases (critical path increases).
 At 512-byte tracking granularity strict persistency and epoch persistency provide comparable persist critical paths; many of the persist constraints removed by relaxing consistency are reintroduced through false sharing.
 
+\section{Future Work}
+\label{sec:PersistencyEval:FutureWork}
+
+This thesis has laid the foundation for reasoning about NVRAM performance and programming interfaces, culminating in memory persistency.
+However, I leave it to future work to investigate how best to use persistency to build recoverable systems with NVRAM.
+
+\textbf{Software for NVRAM.}
+NVRAM should eventually allow data structures with the performance of existing DRAM systems but that recover after failures.
+Such software will require transformations to introduce logs or indirection, or to properly order writes.
+These transformations will slow execution on even volatile memory systems.
+However, an instruction-direct memory interface holds the potential to improve execution beyond block and transaction interfaces by increasing thread concurrency and removing frequent copies inherent in block storage interfaces.
+
+New data structures must be developed to bridge the gap between existing high performance main-memory versions and those that provide recovery with disk.
+For example, ordered indices are typically implemented as B+Trees with disk, but novel (and complicated) variations exist for main memory, such as highly concurrent balanced trees and lock-free skip lists.
+With NVRAM and memory persistency one might imagine a recoverable lock-free tree or skip list with bounded recovery time.
+How to design such data structures remains uncertain, as does their true performance potential.
+
+\textbf{Hardware implementations of persistency models.}
+Once software has been designed we must implement persistency models and NVRAM memory systems in hardware.
+Existing memory consistency encompasses a broad literature of models and implementations, detailing specific relaxations to improve performance.
+High performance techniques involving speculation further improve performance for strict consistency models.
+The same will be true for persistency models, yet I expect models must be further relaxed compared to consistency models (an NVRAM persist may take an order of magnitude longer than making a store visible to other processors).
+Akin to speculation, logging and indirection (such as copy-on-write) may improve performance for implementations of strict persistency models.
+
+\textbf{Implementing efficient persist coalescing.}
+Finally, the previous chapters assume that coalescing will be an important feature of NVRAM systems; indeed, recent work has already demonstrated that without hardware coalescing the software must cache and coalesce persists, introducing additional instructions and increasing the likelihood of design errors \fixme{cite IBM}.
+Coalescing presents several problems such as detecting when coalescing is allowable and determining how long persists should be delayed (delaying a persist increases the chance that it will coalesce with another persist, but may delay important events such as transaction commit).
+Future work must investigate language, compiler, and hardware mechanisms to provide persist coalescing.
+It is possible for coalescing to occur only under specific conditions (e.g., coalescing only occurs between persists on the same thread, coalescing only occurs to a limited number of addresses labeled by the programmer).
+
 \section{Conclusion}
 \label{sec:PersistencyEval:Conclusion}
 
@@ -266,5 +296,5 @@ Future NVRAM technologies offer the performance of DRAM with the durability of d
 However, existing memory interfaces are incapable of guaranteeing proper data recovery by properly enforcing persist order.
 In previous chapters I introduced \emph{memory persistency}, an extension to memory consistency that allows programmers to describe persist order constraints.
 Additionally, I outlined the design space of possible memory persistency models and detailed three persistency models and their use in implementing a persistent queue.
-In this chapter I used memory tracing and simulation to demonstrate that strict persistency models suffer a 30$\times$ slowdown relative to instruction execution rate, and that relaxed persistency effectively regains this performance.
+In this chapter I use memory tracing and simulation to demonstrate that strict persistency models suffer a 30$\times$ slowdown relative to instruction execution rate, and that relaxed persistency effectively regains this performance.
 Memory persistency represents a framework for defining programmer interfaces for NVRAM and reasoning about program correctness for recoverable applications.
