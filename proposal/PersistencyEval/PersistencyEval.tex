@@ -230,7 +230,7 @@ Both of these may vary in real implementations; I measure their effect on persis
 
 \textbf{Atomic Persist Granularity.}
 Atomic persist granularity is an important factor for persist concurrency and performance.
-As in \cite{Condit09} I assume NVRAM persists atomically to at least eight-byte (pointer-sized) blocks of memory (a persist to an eight byte, aligned memory block will always have occurred or not after failure; there is no possibility of a partial persist).
+As in \cite{ConditNightingale09} I assume NVRAM persists atomically to at least eight-byte (pointer-sized) blocks of memory (a persist to an eight byte, aligned memory block will always have occurred or not after failure; there is no possibility of a partial persist).
 However, increasing atomic persist granularity creates opportunities for additional persist coalescing.
 Nearby or adjacent persists may occur atomically and coalesce so long as no persist dependences are violated.
 %For example, consider two ordered persists to adjacent eight-byte objects.

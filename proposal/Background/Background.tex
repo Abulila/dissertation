@@ -205,7 +205,7 @@ All loads and stores appear in a globally consistent order that is an interleavi
 The programmer need not consider memory instructions reordering; barriers are unnecessary.
 
 \textbf{Total Store Order.}
-TSO \cite{SparcManualV8} provides greater performance than SC at the cost of requiring the programmer to insert memory barriers.
+TSO \cite{SPARCv9} provides greater performance than SC at the cost of requiring the programmer to insert memory barriers.
 Most memory operations in each thread are still observed to occur in program order: 1) stores may not reorder with other stores, 2) loads may not reorder with other loads, and 3) a store that occurs after a load may not reorder and appear to occur before that load.
 These rules guarantee that all stores occur in a globally consistent sequential order.
 However, loads that occur after a store in program order may reorder and bypass the store, appearing to occur before the store.

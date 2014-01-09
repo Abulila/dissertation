@@ -34,7 +34,7 @@ Additionally, a volatile \emph{insert list} is maintained to detect when insert 
 \input{PersistencyModels/Fig.CWL_dependences}
 
 Both queue designs use the persistency model to prevent persists to the head pointer from occurring before persists to the data segment for each insert operation.
-Algorithm~\ref{Alg::Queue} includes barriers for two different persistency models (described later in Section~\ref{section:PersistencyModels}).
+Algorithm~\ref{Alg::Queue} includes barriers for two different persistency models (described later in Section~\ref{sec:PersistencyModels:Models}).
 Additionally, persist dependences (and unnecessary constraints introduced by strict persistency models) are shown in Figure~\ref{fig::CWL_dependences}.
 Recovery requires that persists to the head pointer are ordered after persists to the data segment from the same insert operation and persists to the head pointer occur in insert-order to prevent holes in the queue (persists to the head pointer may coalesce so long as no ordering constraint is violated).
 All other persists within the same insert operation and between operations may correctly be concurrent.
@@ -64,7 +64,7 @@ Additional constraints may be introduced between persists within an insert opera
 \section{Memory Persistency Models}
 \label{sec:PersistencyModels:Models}
 
-Section~\ref{section:Persistency} outlined potential classes of persistency models.
+Section~\ref{sec:Persistency:Persistency} outlined potential classes of persistency models.
 I now introduce several specific persistency models to be evaluated in the next chapter.
 All models assume SC as the underlying memory consistency model, and successively relax persistency to introduce specific optimizations.
 For each model I discuss its motivation, give a definition, describe necessary annotations for and performance of our persistent queues, and offer possible implementations.
@@ -73,7 +73,7 @@ For each model I discuss its motivation, give a definition, describe necessary a
 \label{section:PersistencyModels:Strict}
 
 \textbf{Motivation.}
-The first persistency model is Strict Persistency, as discussed in Section~\ref{section:Persistency}.
+The first persistency model is Strict Persistency, as discussed in Section~\ref{sec:Persistency:Persistency}.
 Strict persistency simplifies reasoning about persist ordering by coupling persist dependences to the memory consistency model.
 No additional persist barriers are required, easing the burden on the programmer.
 While strict persistency provides an intuitive first model, under SC, it imposes persist ordering constraints that unnecessarily limit persist concurrency for many data structures, and requires programmers to resort to multi-threading to obtain concurrency.
@@ -111,7 +111,7 @@ Each time a thread persists it increments its persist counter, and each store (i
 Persists drain in program order by maintaining a persist queue per thread/core.
 Persist order between threads is enforced at each load and store by observing the previously recorded thread and counter in the operation's cache line---all subsequent stores from the executing thread must occur after the last persist to the cache line.
 These inter-thread persist constraints may be recorded in threads' queues or by delaying immediately until the other thread's queue drains.
-Such a system resembles BPFS (discussed later in Section~\fixme{1} and Section~\fixme{2}) where each persist occurs in its own epoch \cite{Condit09}.
+Such a system resembles BPFS (discussed later in Section~\fixme{1} and Section~\fixme{2}) where each persist occurs in its own epoch \cite{ConditNightingale09}.
 
 Strict persistency under SC may also be implemented using in-hardware NVRAM logs or copy-on-write and indirection to give the appearance of SC while persists occur concurrently.
 Hardware must ensure both that persists do not occur out of program order for any thread and that conflicting accesses properly enforce persist order across threads.
@@ -140,7 +140,7 @@ Memory operation visibility follows SC.
 
 Additional complexity arises in reasoning about persist ordering across threads. 
 I define a \emph{persist epoch race} as persist epochs from two or more threads that (1) include memory accesses (to volatile or persistent memory) that race, including synchronization races, and (2) at least two of the epochs include persist operations. 
-In the presence of persist epoch races, each persist barrier acts as a persist release for all persists prior to the barrier, and as a persist acquire for all accesses following the barrier \cite{Gharachorloo90}.
+In the presence of persist epoch races, each persist barrier acts as a persist release for all persists prior to the barrier, and as a persist acquire for all accesses following the barrier \cite{GharachorlooLenoski90}.
 As a consequence, persists prior to the persist barrier immediately preceding the first access of the race are ordered before all persists after the next barrier following the second access of the race.
 However, persists within the epochs participating in the persist epoch race are concurrent and may complete in parallel or out of order.
 
@@ -160,7 +160,7 @@ However, synchronization through persistent memory is possible.
 Since persists to the same address must follow the order observed by cache coherence, even if they occur in epochs that race, the outcome of persist synchronization is well defined.
 Hence, atomic read-modify-write operations to persistent memory addresses provide the expected behavior.
 
-My definition of epoch persistency is inspired by the programming model and hardware extensions for caching persisent memory proposed for the Byte-addressable Persistent File System (BPFS) \cite{Condit09}.
+My definition of epoch persistency is inspired by the programming model and hardware extensions for caching persisent memory proposed for the Byte-addressable Persistent File System (BPFS) \cite{ConditNightingale09}.
 However, I introduce several subtle differences that I believe make epoch persistency a more intuitive model.
 My definition considers all memory accesses when determining persist ordering among threads, whereas the BPFS memory system orders persists only when conflicts occur to the persistent address space.
 While the BPFS file system implementation avoids persist epoch races, it is not clear that the burden falls to the programmer to avoid such accesses or what persist behavior results when such races occur (we believe the BPFS authors' intent was to prohibit programs containing such races---the cache implementation deadlocks under persist epoch races containing circular persist dependences).  
@@ -181,7 +181,7 @@ Algorithm~\ref{Alg::Queue} demonstrates how to use epoch persistency's barriers 
 The constraints in Figures~\ref{fig::CWL_dependences} and~\ref{fig::holes_dependences} annotated with ``A" are removed under epoch persistency relative to strict persistency.
 
 \textbf{Implementation.}
-BPFS \cite{Condit09} outlines cache extensions that provide a persistency model similar to persist epochs, assuming the TSO consistency model.
+BPFS \cite{ConditNightingale09} outlines cache extensions that provide a persistency model similar to persist epochs, assuming the TSO consistency model.
 Modifications must be made to detect load-before-store conflicts (and thus enforce SC rather than TSO ordering) and track conflicts to volatile memory addresses as well as persistent memory addresses; detecting load-before-store conflicts and enforcing persist order without frequent delays remains an open problem.
 Instead of delaying execution to enforce persist ordering among threads, optimized implementations avoid stalling execution by buffering persists while recording and subsequently enforcing dependences among them, allowing persists to occur asynchronously despite access conflicts.
 
@@ -239,19 +239,19 @@ In this work, I focus on demonstrating the potential performance that the model 
 
 Durable storage has long been used to recover data after failures.
 All systems that use durable storage must specify and honor dependencies between the operations that update that storage.
-For example, file systems must constrain the order of disk operations to metadata to preserve a consistent file system image~\cite{Ganger00,Chidambaram13}, and databases must obey the order of durable storage updates specified in write-ahead logging~\cite{Mohan92}.
+For example, file systems must constrain the order of disk operations to metadata to preserve a consistent file system image~\cite{Ganger00,Chidambaram13}, and databases must obey the order of durable storage updates specified in write-ahead logging~\cite{MohanHaderle92}.
 
 Specifying and honoring these dependencies becomes harder when the interface to durable storage are loads and stores to a persistent address space.
 Store instructions to an address space are more frequent and fine grained than update operations when using a block-based interface to durable storage (such as a file system).
 In addition, CPU caches interpose on store instructions, which leads to the interaction of persistency and cache consistency discussed in this thesis.
 
 Recent developments in nonvolatile memory technologies have spurred research on how to use these new technologies.
-Some research projects keep the traditional block-based interface to durable storage and devise ways to accelerate this interface~\cite{Caulfield10}.
-Other projects provide a memory-based interface to durable storage~\cite{Coburn11}.
+Some research projects keep the traditional block-based interface to durable storage and devise ways to accelerate this interface~\cite{CaulfieldDe10}.
+Other projects provide a memory-based interface to durable storage~\cite{CoburnCaulfield11}.
 My approach follows the path of providing a memory-based interface to durable storage, arguing that the high speed and byte addressability of new nonvolatile memories provides a natural fit with native memory instructions.
 
 Combining a memory interface to durable storage with multiprocessors adds concurrency control issues to those of durability.
-Transactions are a common and powerful paradigm for handling both concurrency control and durability, so many authors have proposed layering transactions on top of nonvolatile memory~\cite{Lowell97,Coburn11,Volos11,Coburn13}.
+Transactions are a common and powerful paradigm for handling both concurrency control and durability, so many authors have proposed layering transactions on top of nonvolatile memory~\cite{Lowell97,CoburnCaulfield11,VolosTack11,Coburn13}.
 Similarly, a recent paper proposes to couple concurrency control with recovery management by committing execution to durable storage at the granularity of the outermost critical section~\cite{Chakrabarti13}.
 
 While transactions and critical sections are powerful mechanisms for concurrency control, many programs use other mechanisms besides these, such as conditional waits.
@@ -270,7 +270,7 @@ Finally, as with racing persist epochs, durable transactions that race break tra
 A precise persistency model must specify how to avoid such behavior or what intended behavior results from persistent transaction races.
 
 \textbf{BPFS.}
-The techniques most closely related to those proposed in this thesis are the primitives for describing persist dependencies in the Byte-Addressable Persistent File System (BPFS)~\cite{Condit09}.
+The techniques most closely related to those proposed in this thesis are the primitives for describing persist dependencies in the Byte-Addressable Persistent File System (BPFS)~\cite{ConditNightingale09}.
 Condit \emph{et al.} introduce \emph{persist barriers}, similar to existing memory barriers, that constrain the order of writes to the persistent address space.
 Any two persists separated by a barrier must occur in program order, but persists within the same epoch (interval of execution separated by barriers) are concurrent.
 Additionally, Condit assumes that NVRAM allows eight byte atomic writes, allowing many updates to write atomically in-place without additional recovery mechanisms.

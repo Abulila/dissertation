@@ -10,12 +10,12 @@ Refer to Section~\ref{sec:Background:MemoryConsistency} for a discussion of memo
 \label{sec:Persistency:Intro}
 
 Emerging nonvolatile memories (NVRAM) promise high performance recoverable systems.
-These technologies, required as replacements for Flash and DRAM as existing technologies approach scaling limits \cite{Lee09}, pair the high performance and byte addressability of DRAM with the durability of disk and Flash memory.
+These technologies, required as replacements for Flash and DRAM as existing technologies approach scaling limits \cite{LeeIpek09}, pair the high performance and byte addressability of DRAM with the durability of disk and Flash memory.
 Future systems will place these devices on a DRAM-like memory bus, providing systems with throughput similar to DRAM, yet recoverability after failures.
 
 However, ensuring proper recovery requires constraints on the ordering of NVRAM writes.
 Existing DRAM interconnects lack the interface to describe and enforce write ordering constraints; ordering constraints that arise from memory consistency requirements are usually enforced at the processor, which is insufficient for failure tolerance with acceptable performance.
-Recent work has suggested alternative interfaces to enforce NVRAM write order and guarantee proper recovery, for example durable transactions and persist barriers \cite{Volos11, Condit09}.
+Recent work has suggested alternative interfaces to enforce NVRAM write order and guarantee proper recovery, for example durable transactions and persist barriers \cite{VolosTack11, ConditNightingale09}.
 While intuitive and suitable to specific applications, I wish to investigate a more general framework for reasoning about NVRAM write ordering including mechanisms for expressing write constraints that are independent of specific concurrency control mechanisms.
 
 Instead, I recognize that the problem of constraining NVRAM write concurrency strongly resembles memory consistency.
@@ -55,7 +55,7 @@ I am interested in defining persistency models that create opportunities for two
 Additionally, I intend to propose persistency models that maximize instruction execution throughput and preserve existing tools, such as atomic synchronization operations.
 
 \textbf{Persist Buffering.}
-Buffering durable writes and allowing thread execution to proceed ahead of persistent state greatly accelerates performance \cite{Condit09}.
+Buffering durable writes and allowing thread execution to proceed ahead of persistent state greatly accelerates performance \cite{ConditNightingale09}.
 Such buffering overlaps NVRAM write latency with useful execution. 
 To be able to reason about buffering, I draw a distinction between a ``store'', the cache coherence actions required to make a write (including an NVRAM write) visible to other processors, and a ``persist'', the action of writing durably to NVRAM.
 Buffering permits persists to occur asynchronously.  
@@ -67,7 +67,7 @@ In defining persistency models, my goal is to admit as much persist concurrency 
 Persistency model implementations might buffer persists in existing store queues and caches or via new mechanisms, such as buffers within NVRAM devices.
 
 \textbf{Persist Coalescing.}
-I expect that NVRAM devices will guarantee atomicity for persists of some size (e.g., eight-byte atomicity \cite{Condit09}).
+I expect that NVRAM devices will guarantee atomicity for persists of some size (e.g., eight-byte atomicity \cite{ConditNightingale09}).
 Persists to the same atomically persistable block may coalesce (be performed in a single persist operation) provided no happens-before constraints are violated. 
 Persist coalescing creates an opportunity to avoid frequent persists to the same address, and allows caching/buffering mechanisms to act as bandwidth filters \cite{Goodman83}.
 Coalescing also reduces the total number of NVRAM writes, which may be important for NVRAM devices that are subject to wear.
