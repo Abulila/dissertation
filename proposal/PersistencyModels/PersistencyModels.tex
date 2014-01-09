@@ -111,11 +111,11 @@ Each time a thread persists it increments its persist counter, and each store (i
 Persists drain in program order by maintaining a persist queue per thread/core.
 Persist order between threads is enforced at each load and store by observing the previously recorded thread and counter in the operation's cache line---all subsequent stores from the executing thread must occur after the last persist to the cache line.
 These inter-thread persist constraints may be recorded in threads' queues or by delaying immediately until the other thread's queue drains.
-Such a system resembles BPFS (discussed later in Section~\fixme{1} and Section~\fixme{2}) where each persist occurs in its own epoch \cite{ConditNightingale09}.
+Such a system resembles BPFS (discussed next in Section~\ref{section:PersistencyModels:PersistEpochs} and later in Section~\ref{sec:PersistencyModels:RelatedWork}) where each persist occurs in its own epoch \cite{ConditNightingale09}.
 
 Strict persistency under SC may also be implemented using in-hardware NVRAM logs or copy-on-write and indirection to give the appearance of SC while persists occur concurrently.
 Hardware must ensure both that persists do not occur out of program order for any thread and that conflicting accesses properly enforce persist order across threads.
-An intriguing possibility would be to leverage existing hardware transactional memories (HTM), partitioning program execution into transactions that enforce atomicity, isolation, and durability---resembling BulkSC with durable transactions \fixme{cite}.
+An intriguing possibility would be to leverage existing hardware transactional memories (HTM), partitioning program execution into transactions that enforce atomicity, isolation, and durability---resembling BulkSC with durable transactions \cite{CezeTuck07}.
 Transactions must be long enough to minimize transaction overhead (including persist barriers for each durable transaction) and improve persist concurrency (by placing many persists in the same transaction), but short enough to bound resources necessary for atomic transactions and to minimize forward progress lost when a transaction aborts.
 Additionally, transactions may buffer persists so long as transactions become visible to recovery in their proper order.
 I leave it to future work to investigate how to coalesce persists between durable transactions.
@@ -259,7 +259,7 @@ Because of this diversity of concurrency control, we believe it is useful to tre
 Just as much work has been done to create a framework of memory consistency models~\cite{Adve96}, I seek to begin a framework on memory persistency models.
 
 \textbf{Kiln.}
-Zhao \emph{et al.} recently proposed Kiln, a persistent system using multi-versioning in a persistent cache to provide durable transactions \fixme{cite}.
+Zhao \emph{et al.} recently proposed Kiln, a persistent system using multi-versioning in a persistent cache to provide durable transactions \cite{ZhaoLi13}.
 A key feature of this system is that persistence control and thread synchronization are de-coupled; persistent transactions do not ensure isolated transactions (I believe it is implied that additional synchronization must already ensure that transactions are isolated).
 Several persistent transactions may occur within a single critical section without the thread synchronization overheads of isolated multi-thread transactions.
 

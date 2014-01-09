@@ -42,7 +42,7 @@ Each instruction holds all locks corresponding to its memory operands while bein
 %In addition to tracing memory accesses, we instrument the queue benchmarks with region-of-interest markers, persist barriers, and persistent malloc/free to distinguish persistent and volatile address spaces.
 %Each annotation is implemented as a standard function and instrumented in PIN.
 In addition to tracing memory accesses, I instrument the queue benchmarks with persist barriers and persistent malloc/free to distinguish volatile and persistent address spaces.
-My tracing infastructure is available to the public \fixme{cite}.
+My tracing infrastructure is publicly available \cite{AtomicMemoryTrace}.
 
 Tracing memory accesses in such a way ensures that the trace accurately reflects the order of memory accesses from execution.
 %However, as only one instruction from any thread can access each memory region at once, and instructions on each thread occur in program order, our trace is limited to SC.
@@ -284,7 +284,7 @@ The same will be true for persistency models, yet I expect models must be furthe
 Akin to speculation, logging and indirection (such as copy-on-write) may improve performance for implementations of strict persistency models.
 
 \textbf{Implementing efficient persist coalescing.}
-Finally, the previous chapters assume that coalescing will be an important feature of NVRAM systems; indeed, recent work has already demonstrated that without hardware coalescing the software must cache and coalesce persists, introducing additional instructions and increasing the likelihood of design errors \fixme{cite IBM}.
+Finally, the previous chapters assume that coalescing will be an important feature of NVRAM systems; indeed, recent work has already demonstrated that without hardware coalescing the software must cache and coalesce persists, introducing additional instructions and increasing the likelihood of design errors \cite{ConditNightingale09,FangHsiao11}.
 Coalescing presents several problems such as detecting when coalescing is allowable and determining how long persists should be delayed (delaying a persist increases the chance that it will coalesce with another persist, but may delay important events such as transaction commit).
 Future work must investigate language, compiler, and hardware mechanisms to provide persist coalescing.
 It is possible for coalescing to occur only under specific conditions (e.g., coalescing only occurs between persists on the same thread, coalescing only occurs to a limited number of addresses labeled by the programmer).
