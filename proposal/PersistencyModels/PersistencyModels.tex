@@ -214,6 +214,12 @@ To enforce necessary ordering, a persist strand begins by reading any memory loc
 These reads introduce an ordering dependency due to cache coherence, which can then be enforced with a subsequent persist barrier.
 This programming interface allows ordering constraints to be specified at the granularity of individual addresses; the minimal set of persist dependences is achieved by placing each persist in its own strand, loading all addresses the persist must depend on, inserting a persist barrier, and then executing the persist.
 
+While intended for persistency, strand persistency additionally functions as a consistency model (\emph{strand consistency}).
+Strand consistency requires full memory barriers in lieu of persist barriers; loads and stores may not reorder across memory barriers.
+Additionally, the execution of loads and stores may not reorder across strand barriers for the purpose of observing memory dependences between strands on the same thread, but loads and stores from different strands that do not interact may reorder with respect to other processors and threads.
+Dependences propagate through memory execution and cache coherence, with strands from the same thread being concurrent if they do not share conflicts through memory (i.e., the visibility of loads and stores from different strands may reorder).
+Recent trends suggest that such a relaxed consistency model is unnecessary for typical memory architectures; memory systems have tended towards stricter models with improved performance.
+
 \textbf{Persist Performance.}
 Our persistent queue implementations place each insert task in a separate persist strand.
 The result is that all unnecessary persist constraints are removed, including constraints between inserts from the same thread.
