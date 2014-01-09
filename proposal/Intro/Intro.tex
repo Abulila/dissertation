@@ -5,7 +5,7 @@ Flash memory, primarily used for mobile storage, has gained traction as a high-p
 Nonvolatile Random Access Memories (NVRAM), such as phase change memory and spin-transfer torque RAM, have emerged as high performance storage alternatives \cite{BurrKurdi08}.
 
 These technologies offer significant performance improvements over disk, while still providing durability with great storage capacity.
-As drop-in replacements for disk, Flash and NVRAM accelerate storage access.
+As drop-in replacements for disk, Flash and NVRAM greatly accelerate storage access.
 However, the disk interface fails to leverage specific device characteristics.
 Section~\ref{sec:Background:Storage} provides a background on these storage technologies and specifically how their performance differs from disk.
 
@@ -19,22 +19,22 @@ I match each workload to the emerging storage technology that suits it best and 
 
 Analytics relies on disk to provide enormous data capacity.
 Typical analytics work-flow involves taking a snapshot of data from an online database and mining this data for complex, yet useful, patterns.
-While applications do not rely on disk's durability for recovery (in fact, instances that fit in main memory have no need for disk), modern analytics data sets reach peta-byte scale \cite{Economist10}, and accessing such large data quickly becomes the dominant bottleneck.
-Such capacity is only reasonably achieved by dense disk and Flash memory.
+While applications do not rely on disk's durability for recovery (in fact, instances that fit in main memory have no need for disk), modern analytics data sets reach peta-byte scale \cite{Economist10}, and accessing such large data imposes the dominant bottleneck.
+Such capacity is currently achieved only by dense disk and Flash memory.
 
 Decades of research have provided modern analytics databases with tools to minimize storage accesses, particularly slow random accesses (e.g., disk-specific indexes, join algorithms to minimize page access and produce large sequential runs).
 Whereas these optimizations are still effective for Flash, they fail to leverage Flash's ability to quickly read non-sequential data (many optimizations purposefully avoid random access patterns on disk).
 As examples, I consider access paths (various scan types) and join algorithms.
 An historic rule of thumb for scans is that an index should be used when less than 10\% of rows in a table are returned, otherwise the entire table should be scanned \cite{RamakrishnanAndGehrke}.
 The intuition is that locating rows from an index requires random reads as well as reading additional pages from the index itself.
-At sufficiently high selectivities accessing the entire table, scanning all rows and returning those that satisfy the query, provides a faster access path.
+At sufficiently high selectivities, accessing the entire table, scanning all rows and returning those that satisfy the query, provides a faster access path.
 One would expect this selectivity (10\%) to increase when replacing disk with Flash -- Flash is no longer penalized by random reads, preferring any scan that minimizes total page accesses.
 Similarly, different ad hoc join algorithms (those that do not use indexes: block-nested loops, sort-merge join, and hybrid-hash join) present different storage access patterns and may be variably suited to disk and Flash.
 These algorithms and query optimization are further discussed in Section~\ref{sec:Background:Scans}.
 
 My results, originally presented in ADMS 2010 \cite{PelleyWenisch11} and discussed in Chapter~\ref{chap:FlashOpti}, show that while both previous hypotheses are correct, their significance is negligible.
 Optimal access path (index vs table scan) only changes between disk and Flash for a small range of query selectivities, and queries within that range see only a small performance improvement.
-Additionally, join algorithm choice makes little difference, as optimized join algorithms exhibit nearly balanced read and write capacity in large sequential runs -- join algorithms optimized for disk are already optimized for Flash.
+Additionally, join algorithm choice makes little difference, as optimized join algorithms already minimize storage accesses, regardless of access pattern---join algorithms optimized for disk are already optimized for Flash.
 I conclude that the page-oriented nature of Flash limits further analytics-Flash optimization.
 On the other hand, emerging byte-addressable NVRAMs offer finer-grained access.
 However, analytics does not require persistent storage, instead using NVRAM as a replacement for DRAM.
@@ -47,7 +47,7 @@ Databases have been designed for decades to provide high-throughput transaction 
 Write Ahead Logging (WAL) techniques, such as ARIES \cite{MohanHaderle92}, transform random writes into sequential writes and minimize transactions' dependences on disk accesses.
 Section~\ref{sec:Background:Recovery} outlines modern recovery management, focusing on ARIES.
 With sufficient device throughput (IOPS) and read-buffering, databases can be made compute-bound and recover near-instantly.
-NVRAMs provide this massive storage throughput, which I expect will provide high transaction performance and low recovery latency to the masses.
+NVRAMs provide this massive storage throughput to the masses.
 
 Whereas ARIES is necessary for disk, it presents only unnecessary software overheads to NVRAM.
 I show that removing ARIES improves transaction throughput by alleviating software bottlenecks inherent in centralized logging.
@@ -64,35 +64,36 @@ As expected, low latency memory-bus-connected NVRAM needs little additional cach
 However, long latency NVRAM and complex interconnects (e.g., Non-Uniform Memory Architectures -- NUMA, PCIe-attached NVRAM, or distributed storage) benefit from DRAM caching and \GroupCommit to improve throughput.
 I investigate specifically how NVRAM read and persist barrier latencies drive OLTP system design.
 These results and additional evaluations are presented in Chapter~\ref{chap:OLTP_eval}.
-This work is currently under review at VLDB.
+This work was originally published at VLDB \cite{Pelley13}.
 
-\section{Persistent Memory Consistency}
+\section{Memory Persistency}
 \label{sec:Intro:PMC}
 
 The previous work looks at how OLTP recovery mechanisms should be designed, considering only the average delay incurred by persist barriers.
-To complete my dissertation I intend to investigate specific programming models that provide persist barriers, their probable performance, and ease of programming.
-Whereas existing \emph{memory consistency} models provide control over the order and visibility of volatile memory reads and writes across threads, there are no equivalent models to reason about data persistence.
+The final portion of this thesis investigates specific programming interfaces to order NVRAM writes.
+Whereas existing memory consistency models provide control over the order and visibility of volatile memory reads and writes across threads, there are no equivalent models to reason about data persistence.
 Memory consistency may be relaxed, allowing communicating threads to each observe different memory read and write orders.
 Such memory consistency models improve performance, but require complex reasoning and additional programming mechanisms (memory barriers) to ensure expected behavior.
 Memory models are described in Section~\ref{sec:Background:MemoryConsistency}.
 
 Similarly, NVRAM write order may be relaxed, improving performance by allowing writes to occur in parallel or out of order.
-I define the rules that govern persistent write order as \emph{Persistent Memory Consistency}.
-Relaxed persistent consistency models use persist barriers to enforce specific write orders, guaranteeing that data is correctly recovered after failure.
-I explore existing solutions, describe why they fall short, and place them into a more precisely defined taxonomy of persistent consistency.
-I introduce relaxed persistent consistency models and qualitatively reason about their performance in Chapter~\ref{chap:PMC}.
+I introduce \emph{memory persistency}, a framework that extends memory consistency, to reason about NVRAM write order.
+Relaxed memory persistency models use persist barriers to enforce specific write orders, guaranteeing that data is correctly recovered after failure.
+I define memory persistency and enumerate the possible design space in Chapter~\ref{chap:Persistency}
 Interestingly, persistent memory consistency models may be de-coupled from the underlying memory consistency model, separately enforcing the order in which writes becomes durable and the order in which writes become visible to other threads.
-Finally, I highlight new optimizations for persist barriers and persistent consistency, providing example persistent data structures in Chapter~\ref{chap:PMC_patterns}.
-Future work will include performance evaluations, new consistency models, and the design of additional data structures.
+I introduce a persistent queue benchmark and several memory persistency models in Chapter~\ref{chap:PersistencyModels}.
+Finally, I evaluate these models using the persistent queue in Chapter~\ref{chap:PersistencyEval}.
+Strict persistency models slow execution nearly $30\times$ relative to existing throughput on volatile, nonrecoverable systems.
+Relaxed persistency models regain lost throughput by improving NVRAM write concurrency.
 
 \section{Data Center Infrastructure}
 \label{sec:Intro:Additional}
 The primary themes of this thesis include performance, cost efficiency, and reliability.
-While I focus on storage architectures, I have published additional work regarding the cost and reliability of data center infrastructure.
-Appendix~\ref{app:WEED} contains ``Understanding and Abstracting Total Data Center Power," \cite{PelleyMeisner09} published at WEED 2009.
+While I focus on storage architectures, I additionally published work regarding the cost and reliability of data center infrastructure.
+Appendix~\ref{app:WEED} contains ``Understanding and Abstracting Total Data Center Power," published at WEED 2009 \cite{PelleyMeisner09}.
 This work presents power/energy models for all aspects of the data center, including power distribution, battery backups, cooling infrastructure, and IT equipment.
-Appendix~\ref{app:PowerRouting} contains ``PowerRouting: Dynamic Power Provisioning for the Data Center," \cite{PelleyMeisner10} published at ASPLOS 2010.
-PowerRouting distributes power infrastructure throughout the data center to minimize installed power infrastructure capacity while maintaining reliability, minimizing data center cost.
+Appendix~\ref{app:PowerRouting} contains ``PowerRouting: Dynamic Power Provisioning for the Data Center," published at ASPLOS 2010 \cite{PelleyMeisner10}.
+PowerRouting distributes power distribution responsibility throughout the data center to minimize installed power infrastructure capacity while maintaining reliability, minimizing data center cost.
 The key insight is that data centers typically over-provision infrastructure, resulting in under-utilized (and often unnecessary) equipment.
 PowerRouting leverages compute-specific knowledge of the IT workload to more effectively utilize power infrastructure.
 Both of these works are included without modification.
@@ -103,16 +104,12 @@ Recognizing storage and memory as primary concerns for energy efficiency, reliab
 
 \section{Summary}
 \label{sec:Intro:Summary}
-This proposal is formatted according to the thesis guidelines for the University of Michigan.
-Where possible, I intend to use portions of the proposal in my final thesis.
-The dissertation is organized as follows:
-Chapter~\ref{chap:Background} contains background information on storage technologies and database optimizations.
+This thesis investigates new techniques for accelerating data access for new NVRAM storage technologies, and is organized as follows:
+Chapter~\ref{chap:Background} contains background information on storage technologies, database optimizations, and memory consistency.
 This background forms the foundation of the work that follows.
 Chapter~\ref{chap:FlashOpti} considers taking advantage of Flash's fast random reads to accelerate database analytics.
-I consider this work complete and do not propose any extension.
-In Chapter~\ref{chap:OLTP_design} I describe potential software designs for OLTP using NVRAM and a methodology to evaluate NVRAM (devices not readily available) on modern hardware.
-I propose additional work to extend and complete this project in Sections~\ref{sec:OLTP_design:GroupCommit:Proposed} and~\ref{sec::OLTP_design:GroupCommit:Proposed}.
-Chapter~\ref{chap:OLTP_eval} uses my methodology to evaluate several aspects of OLTP running on NVRAM.
-Again, I propose additional evaluations in Section~\ref{sec:OLTP_eval:Proposed}.
-Chapters~\ref{chap:PMC} and~\ref{chap:PMC_patterns} describe in-progress work on persistent memory consistency, persistent data structures, and their performance.
-The ideas contained in those chapters are not mature and I welcome feedback.
+In Chapter~\ref{chap:OLTP_design} I describe potential software designs for OLTP using NVRAM.
+Chapter~\ref{chap:OLTP_eval} details a methodology to evaluate NVRAM (devices not readily available) on modern hardware and evaluates several aspects of OLTP running on NVRAM.
+Chapter\ref{chap:Persistency} introduces and defines memory persistency.
+Specific memory persistency models and a persistent queue data structure are proposed in Chapter~\ref{chap:PersistencyModels}.
+Finally, I evaluate memory persistency models in Chapter~\ref{chap:PersistencyEval}.
