@@ -11,4 +11,4 @@ While intuition suggests scan and join selection should shift between disk and F
 Second, I examine new opportunities for durable, recoverable transaction processing with NVRAM.
 Existing disk-based recovery mechanisms impose large software overheads, yet updating data in-place requires frequent device synchronization that limits throughput.
 I introduce a new design, \GroupCommit, to amortize synchronization delays over many transactions, increasing throughput at some cost to transaction latency.
-Finally, I propose to research programming interfaces and hardware designs to enable intuitive, high performance recoverable data structures with NVRAM, extending memory consistency with persistent semantics to introduce \emph{Persistent Memory Consistency}.
+Finally, I propose a new framework for persistent programming and memory systems to enable high performance recoverable data structures with NVRAM, extending memory consistency with persistent semantics to introduce \emph{memory persistency}.
