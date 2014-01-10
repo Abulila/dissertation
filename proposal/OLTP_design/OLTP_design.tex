@@ -24,7 +24,7 @@ Figure~\ref{fig::Recovery} demonstrates this potential, displaying recovery time
 \input{OLTP_design/Fig.Recovery.tex}
 
 The ARIES/WAL points (black circles) in the Figure show forward-processing throughput (horizontal axis) and recovery time (vertical axis) as a function of device write throughput (annotated alongside each point as pages per second).
-As database throughput can greatly outpace existing storage devices (this configuration requires 6,000 page writes/s to bound recovery; measured disk and flash devices provide only 190 and 2,500 page writes/s, respectively) I model recovery performance under faster NVRAM using a RAM disk for log and heap while limiting the page flush rate.
+As database throughput can greatly outpace existing storage devices (this configuration requires 6,000 page writes/s to bound recovery; measured disk and Flash devices provide only 190 and 2,500 page writes/s, respectively) I model recovery performance under faster NVRAM using a RAM disk for log and heap while limiting the page flush rate.
 As intuition would suggest, greater write bandwidth enables more aggressive flushing, minimizing the number of dirtied pages in the buffer cache at the time of failure, in turn reducing recovery time.
 With enough write bandwidth (in this case, 127,000 flushes/s, or 0.97 GB/s random writes for 8KB pages) the database recovers near-instantly, but forward-processing performance remains compute bound.
 Achieving such throughput today requires large, expensive disk arrays or enterprise Flash storage devices; future NVRAM devices might enable similar performance on commodity systems.

@@ -347,7 +347,7 @@ Longer batches help slightly by allowing updates to coalesce within the batch, r
 The bandwidth requirements would be reduced by introducing mechanisms to enable early persists (persist data before the batch ends).
 
 While persist bandwidth requirements vary, the strictest configuration (\NVDisk for TATP) requires only 1.7GB/s.
-Such bandwidth is currently possible with existing PCIe flash memory SSDs, and I believe is attainable for all candidate NVRAM technologies.
+Such bandwidth is currently possible with existing PCIe Flash memory SSDs, and I believe is attainable for all candidate NVRAM technologies.
 Thus, I conclude that persist bandwidth will not be a concern for OLTP systems using NVRAM.
 
 \textbf{Device lifetime.}
