@@ -29,7 +29,7 @@ As intuition would suggest, greater write bandwidth enables more aggressive flus
 With enough write bandwidth (in this case, 127,000 flushes/s, or 0.97 GB/s random writes for 8KB pages) the database recovers near-instantly, but forward-processing performance remains compute bound.
 Achieving such throughput today requires large, expensive disk arrays or enterprise Flash storage devices; future NVRAM devices might enable similar performance on commodity systems.
 
-NVRAM opens up even more exciting opportunities for recovery management if we consider re-architecting database software.
+NVRAM opens up even more exciting opportunities for recovery management when considering re-architecting database software.
 Figure~\ref{fig::Recovery} shows this additional potential with a design point (red triangle) that removes WAL and asynchronous page flushing---optimizations primarily designed to hide disk latency.
 Throughput improves due to three effects: (1) threads previously occupied by page and log flushers become available to serve additional transactions, (2) asynchronous page flushing, which interferes with transactions as both flusher and transaction threads latch frequently accessed pages, is removed, and (3) transactions no longer insert WAL log entries, reducing the transaction code path.
 In aggregate these simplifications amount to a 50\% throughput increase over ARIES's instantaneous-recovery NVRAM performance.
@@ -126,7 +126,7 @@ I remove redo logs by keeping the database's durable state up-to-date.
 %Transaction undo logs remain durable so that in-flight transactions at the time of failure can be rolled back.
 %Each page update consists of (1) latching the page, (2) inserting an undo entry into the transaction-private undo log, using \texttt{persist\_wal()}, (3) updating the page in-place, using \texttt{persist\_page()} (without an intermediate volatile page), and (4) releasing the page latch.
 In ARIES terms, the database maintains its replayed state---there is no need to replay a redo log after failure.
-Undo logs need not be ordered across transactions (transactions are free to roll back in any order), so we distribute ARIES undo logs by transaction.
+Undo logs need not be ordered across transactions (transactions are free to roll back in any order), and are instead distributed by transaction.
 Such private logs are simpler and impose fewer overheads than centralized logs.
 Other databases (such as Oracle) already distribute undo logs in rollback segments and undo table spaces \cite{OracleDoc}.
 Transaction undo logs remain durable so that in-flight transactions can be rolled back after failure.
@@ -193,7 +193,7 @@ However, increasing batch length defers commit for all transactions in the batch
 \label{sec::OLTP_design:GroupCommit:Performance}
 
 \GroupCommit improves on \InPlace by minimizing persist barrier frequency.
-However, additional overheads are introduced to (i) track modified addresses while transactions execute, (ii) quiesce transactions at batch end, and (iii) persist and commit each batch.
+However, additional overheads are introduced to (1) track modified addresses while transactions execute, (2) quiesce transactions at batch end, and (3) persist and commit each batch.
 I outline new mechanisms to accelerate batch performance.
 
 \textbf{Hierarchical bitmap set.}
@@ -281,7 +281,7 @@ Agrawal and Jagadish explore several algorithms for atomic durable transactions 
 They describe the operation and correctness of each mechanism and provide an analytic cost model to compare them.
 Their work represents the middle column, middle row of Table~\ref{table::DesignSpace} (\InPlace with no volatile buffer).
 Aky\"{u}rek and Salem present a hybrid DRAM and NVRAM buffer cache design alongside strategies for managing cache allocation \cite{SalemAkyrek95}.
-Such \emph{Partial Memory Buffers} resemble the middle-top cell of our design space table (\InPlace with a software-managed DRAM buffer), although their design considers NVRAM as part of a hybrid buffer, not the primary persistent store.
+Such \emph{Partial Memory Buffers} resemble the middle-top cell of the design space table (\InPlace with a software-managed DRAM buffer), although their design considers NVRAM as part of a hybrid buffer, not the primary persistent store.
 Neither of these works considers alternative approaches (such as \GroupCommit), to account for large persist barrier latency and associated delays.
 Additionally, this work extends prior work by providing a more precise performance evaluation and more detailed consideration of NVRAM characteristics.
 
@@ -324,7 +324,7 @@ Such hardware must still serialize and persist log entries; contention while ser
 Finally, editable atomic writes use physical logging (updates are recorded as location-data-length tuples), as opposed to logical logging (updates are recorded as a set of data and functions to apply/roll back the update).
 Logical logging is necessary to precisely control data placement in the presence of concurrent transactions.
 For example, to maintain B+Tree elements in sorted order within a page each transaction may have to modify large portions of the page (to shift entries), even if those entries were recently modified by an outstanding transaction.
-It is unclear if physical logging provides all the features we expect from ARIES.
+It is unclear if physical logging provides all the features expected from ARIES.
 
 %While different than byte addressable NVRAMs, Flash memory has become an important storage medium.
 %Similar in theme to this work, numerous authors have considered designing databases specifically for Flash (\cite{BernsteinReid11}, \cite{SarwatMokbel11}).

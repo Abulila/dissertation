@@ -434,7 +434,7 @@ Finally, I demonstrate that persist bandwidth is not a concern and that while \N
 %While the recovery mechanisms presented here each produce varying persist rates with different abilities to naturally distribute persists across addresses, it is unclear if software mechanisms are sufficient to prolong device lifetime.
 %I intend to study expected device lifetime for each recovery mechanism, both assuming that persists to an address always persist to the same cell, and assuming hardware that evenly distributes persists across cells.
 %
-%When wear-levelling hardware is unavailable \NVDisk manages to prolong lifetime the best of the three recovery mechanisms.
+%When wear-leveling hardware is unavailable \NVDisk manages to prolong lifetime the best of the three recovery mechanisms.
 %Centralized logs evenly persist to the entire log address space.
 %Writes to individual pages may be bounded by limiting the page flush rate, although at the cost of recovery latency.
 %\InPlace provides the shortest device lifetime.
@@ -444,9 +444,9 @@ Finally, I demonstrate that persist bandwidth is not a concern and that while \N
 %However, batches are sufficiently short that hot addresses still experience a high write-rate, wearing out quickly.
 %
 %The story changes when hardware spreads persists across NVRAM cells.
-%With wear-levelling the primary concern is the total number of persists; all cells experience the same number of persists.
+%With wear-leveling the primary concern is the total number of persists; all cells experience the same number of persists.
 %While \GroupCommit outperforms \NVDisk and \InPlace in this regard, none of the recovery mechanisms pose a device lifetime concern.
-%Simply put, an insufficient amount of data persists to worry about device lifetime in the presence of hardware wear-levelling.
+%Simply put, an insufficient amount of data persists to worry about device lifetime in the presence of hardware wear-leveling.
 %I will include a quantitative evaluation of device lifetime by measuring the rate that persists occur to individual addresses.
 
 \section{Conclusion}

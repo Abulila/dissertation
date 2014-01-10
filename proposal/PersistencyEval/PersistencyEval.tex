@@ -114,7 +114,7 @@ At low persist latency all persistency models achieve instruction execution rate
 However, as persist latency increases each model eventually becomes persist-bound and throughput quickly degrades.
 Strict persistency becomes persist-bound at only 17ns.
 Epoch persistency improves persist concurrency---instruction execution rate and persist rate break even at 119ns.
-While this is a great improvement we expect most NVRAM technologies to exhibit higher persist latency.
+While this is a great improvement, I expect most NVRAM technologies to exhibit higher persist latency.
 Finally, strand persistency offers sufficient persist concurrency to become persist-bound only above 6us.
 
 In all cases throughput quickly decreases once execution is persist-bound as persist latency continues to increase.
@@ -277,7 +277,7 @@ With NVRAM and memory persistency one might imagine a recoverable lock-free tree
 How to design such data structures remains uncertain, as does their true performance potential.
 
 \textbf{Hardware implementations of persistency models.}
-Once software has been designed we must implement persistency models and NVRAM memory systems in hardware.
+Once software has been designed we will require hardware implementations of persistency models and NVRAM memory systems.
 Existing memory consistency encompasses a broad literature of models and implementations, detailing specific relaxations to improve performance.
 High performance techniques involving speculation further improve performance for strict consistency models.
 The same will be true for persistency models, yet I expect models must be further relaxed compared to consistency models (an NVRAM persist may take an order of magnitude longer than making a store visible to other processors).

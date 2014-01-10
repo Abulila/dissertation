@@ -128,7 +128,7 @@ However, the programmer is now responsible for inserting the correct memory barr
 
 Strict persistency unifies the problem of reasoning about allowable memory order and allowable persist order (equivalently, allowable persistent states at recovery); a program that is correctly synchronized with respect to the consistency model is also correctly labeled with respect to the recovery observer.
 However, directly implementing strict persistency implies frequent stalls---consistency ordering constraints (e.g., at every memory operation under SC and at memory barriers under RMO) stall execution until NVRAM writes complete. 
-A programmer seeking to maximize persist performance must rely either on relaxed consistency (with the concomitant challenges of correct program labelling), or must aggressively employ thread concurrency to eliminate persist ordering constraints.
+A programmer seeking to maximize persist performance must rely either on relaxed consistency (with the concomitant challenges of correct program labeling), or must aggressively employ thread concurrency to eliminate persist ordering constraints.
 As I will show, decoupling persistency and consistency ordering allows recoverable data structures with high persist concurrency even under SC.
 
 I introduce one important optimization to strict persistency, \emph{buffered strict persistency}, which can improve performance while still guaranteeing strict ordering of persists and visible side effects.  

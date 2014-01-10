@@ -58,8 +58,8 @@ The length and endBit persist before the head pointer; the data segment persists
 An inserted entry is recoverable only after the persist at line 37 completes, even though the head pointer is persisted earlier at line 33.
 
 As with the other queue designs many unnecessary persist constraints may be introduced by strict persistency models, shown as dashed lines in Figure~\ref{fig::holes_dependences}.
-Many constraints are introduced by persistency models that enforce the program order of persists, labelled ``A."
-Additional constraints may be introduced between persists within an insert operation or across insert operations, labelled ``B."
+Many constraints are introduced by persistency models that enforce the program order of persists, labeled ``A."
+Additional constraints may be introduced between persists within an insert operation or across insert operations, labeled ``B."
 
 \section{Memory Persistency Models}
 \label{sec:PersistencyModels:Models}
@@ -67,7 +67,7 @@ Additional constraints may be introduced between persists within an insert opera
 Section~\ref{sec:Persistency:Persistency} outlined potential classes of persistency models.
 I now introduce several specific persistency models to be evaluated in the next chapter.
 All models assume SC as the underlying memory consistency model, and successively relax persistency to introduce specific optimizations.
-For each model I discuss its motivation, give a definition, describe necessary annotations for and performance of our persistent queues, and offer possible implementations.
+For each model I discuss its motivation, give a definition, describe necessary annotations for and performance of the persistent queues, and offer possible implementations.
 
 \subsection{Strict Persistency}
 \label{section:PersistencyModels:Strict}
@@ -92,7 +92,7 @@ Lacking mechanisms to relax persist ordering, strict persistency under SC introd
 These dependences are introduced because persists occur in program order under SC.
 This persistency model lacks the ability to declare two persists from the same thread to be concurrent (unless the persists may occur atomically).
 However, persist concurrency may be created by using multiple threads to concurrently insert into the queue.
-\emph{Two-Lock Concurrent} and \emph{Queue Holes} each allow concurrent inserts, and thus persists from different threads into the data segment are concurrent---The dashed line labelled ``B" in Figure~\ref{fig::CWL_dependences} no longer implies a constraint.
+\emph{Two-Lock Concurrent} and \emph{Queue Holes} each allow concurrent inserts, and thus persists from different threads into the data segment are concurrent---The dashed line labeled ``B" in Figure~\ref{fig::CWL_dependences} no longer implies a constraint.
 
 \textbf{Implementation.}
 A straight-forward implementation of strict persistency stalls issue of subsequent memory accesses until a store and its corresponding persist both complete.
@@ -163,7 +163,7 @@ Hence, atomic read-modify-write operations to persistent memory addresses provid
 My definition of epoch persistency is inspired by the programming model and hardware extensions for caching persisent memory proposed for the Byte-addressable Persistent File System (BPFS) \cite{ConditNightingale09}.
 However, I introduce several subtle differences that I believe make epoch persistency a more intuitive model.
 My definition considers all memory accesses when determining persist ordering among threads, whereas the BPFS memory system orders persists only when conflicts occur to the persistent address space.
-While the BPFS file system implementation avoids persist epoch races, it is not clear that the burden falls to the programmer to avoid such accesses or what persist behavior results when such races occur (we believe the BPFS authors' intent was to prohibit programs containing such races---the cache implementation deadlocks under persist epoch races containing circular persist dependences).  
+While the BPFS file system implementation avoids persist epoch races, it is not clear that the burden falls to the programmer to avoid such accesses or what persist behavior results when such races occur (I believe the BPFS authors' intent was to prohibit programs containing such races---the cache implementation deadlocks under persist epoch races containing circular persist dependences).  
 Furthermore, BPFS detects conflicts to the persistent address space by recording the last thread and epoch to persist to each cache line; the next thread to access that line will detect the conflict.
 Such an implementation, however, cannot detect conflicts where the first access is a load and the second a store.
 As a result, BPFS detects conflicts to persistent memory according to TSO rather than SC ordering \cite{SPARCv9}.
@@ -177,7 +177,7 @@ Lock operations occur in the same epoch as the first persists of the insert oper
 \emph{Copy While Locked} and \emph{Queue Holes} retain recovery correctness by still ordering all persists to the head marker (persists will occur according to cache coherence order).
 As a result, persists protected by a lock now occur concurrently.
 
-Figure~\ref{Alg::Queue} demonstrates how to use epoch persistency's barriers (shown in the code as $PersistBarrier$) within our queue designs.
+Figure~\ref{Alg::Queue} demonstrates how to use epoch persistency's barriers (shown in the code as $PersistBarrier$) within each queue design.
 The constraints in Figures~\ref{fig::CWL_dependences} and~\ref{fig::holes_dependences} annotated with ``A" are removed under epoch persistency relative to strict persistency.
 
 \textbf{Implementation.}
@@ -221,7 +221,7 @@ Dependences propagate through memory execution and cache coherence, with strands
 Recent trends suggest that such a relaxed consistency model is unnecessary for typical memory architectures; memory systems have tended towards stricter models with improved performance.
 
 \textbf{Persist Performance.}
-Our persistent queue implementations place each insert task in a separate persist strand.
+The persistent queue implementations place each insert task in a separate persist strand.
 The result is that all unnecessary persist constraints are removed, including constraints between inserts from the same thread.
 Figure~\ref{Alg::Queue} includes the necessary strand persistency annotations ($NewStrand$ and $PersistBarrier$).
 All unnecessary constraints from Figures~\ref{fig::CWL_dependences} and~\ref{fig::holes_dependences} are removed; those removed in moving from epoch persistency to strand persistency are labeled ``B."
@@ -255,7 +255,7 @@ Transactions are a common and powerful paradigm for handling both concurrency co
 Similarly, a recent paper proposes to couple concurrency control with recovery management by committing execution to durable storage at the granularity of the outermost critical section~\cite{Chakrabarti13}.
 
 While transactions and critical sections are powerful mechanisms for concurrency control, many programs use other mechanisms besides these, such as conditional waits.
-Because of this diversity of concurrency control, we believe it is useful to treat the issues of consistency and persistency separately.
+Because of this diversity of concurrency control, I believe it is useful to treat the issues of consistency and persistency separately.
 Just as much work has been done to create a framework of memory consistency models~\cite{Adve96}, I seek to begin a framework on memory persistency models.
 
 \textbf{Kiln.}
