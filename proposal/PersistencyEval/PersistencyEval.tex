@@ -272,7 +272,7 @@ These transformations will slow execution on even volatile memory systems.
 However, an instruction-direct memory interface holds the potential to improve execution beyond block and transaction interfaces by increasing thread concurrency and removing frequent copies inherent in block storage interfaces.
 
 New data structures must be developed to bridge the gap between existing high performance main-memory versions and those that provide recovery with disk.
-For example, ordered indices are typically implemented as B+Trees with disk, but novel (and complicated) variations exist for main memory, such as highly concurrent balanced trees and lock-free skip lists.
+For example, ordered indexes are typically implemented as B+Trees with disk, but novel (and complicated) variations exist for main memory, such as highly concurrent balanced trees and lock-free skip lists.
 With NVRAM and memory persistency one might imagine a recoverable lock-free tree or skip list with bounded recovery time.
 How to design such data structures remains uncertain, as does their true performance potential.
 
