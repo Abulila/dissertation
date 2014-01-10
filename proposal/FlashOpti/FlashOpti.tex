@@ -8,8 +8,8 @@ Refer to Sections~\ref{sec:Background:Storage} and~\ref{sec:Background:Analytics
 
 For decades, database management systems (DBMSs) have used rotating magnetic disks to provide durable storage.
 Though inexpensive, disks are slow, particularly for non-sequential access patterns due to high seek latencies.
-With the rapid improvements in storage density and drop in price of Flash-based Solid State Disks (SSDs), DBMS administrators are beginning to supplant conventional rotating disks with SSDs for performance-critical data in myriad DBMS applications.
-Though SSDs are several factors more expensive than conventional disks (in terms of \$ per GB), they provide modest (2\texttimes) improvements in sequential IO and drastic (over 100\texttimes) improvements for random IO, closing the gap between these access patterns.
+With the rapid improvements in storage density and decreasing price of Flash-based Solid State Disks (SSDs), DBMS administrators are beginning to supplant conventional rotating disks with SSDs for performance-critical data in myriad DBMS applications.
+Though SSDs are often significantly more expensive than conventional disks (in terms of \$ per GB), they provide modest (2\texttimes) improvements in sequential IO and drastic (over 100\texttimes) improvements for random IO, closing the gap between these access patterns.
 
 Many components of modern DBMSs have been designed to work around the adverse performance characteristics of disks (e.g., page-based buffer pool management, B-tree indexes, advanced join algorithms, query optimization to avoid non-sequential IO, prefetching, and aggressive IO request reordering).  
 As SSDs present substantially different performance trade-offs, over the past few years researchers have begun to examine how SSDs are best deployed for a variety of storage applications \cite{Bouganim09uflip:understanding, Chen2009}, including DBMSs \cite{Lee2008, Yin2009, Li2009, Baumann2010, Tsirogiannis2009}.  
@@ -31,7 +31,7 @@ Despite this intuition, my empirical investigation using a commercial DBMS finds
 I demonstrate this result, and explore why it is the case, in two steps.
 
 First, I analyze the performance of scan operators.  
-Classic rules of thumb suggest that non-clustered index scans are preferable at low selectivity (e.g., below 10\%), whereas a relation scan is faster at high selectivity, because it can leverage sequential IOs.
+Classic rules of thumb suggest that non-clustered index scans are preferable at low selectivity (i.e., below 10\%), whereas a relation scan is faster at high selectivity, because it can leverage sequential IOs.
 Therefore, the optimizer should prefer index scans at much higher selectivities on SSDs.  
 I demonstrate analytically and empirically that this intuition is false---the range of selectivities for which an index scan operation can benefit from SSDs' fast random reads is so narrow that it is inconsequential in practice.
 
@@ -95,7 +95,7 @@ I turn to this question next.
 
 \textbf{Analytic results.}
 \input{FlashOpti/fig.analytic.tex}
-The previous results show that index scans underperforms at selectivities far below what the classic 10\% rule of thumb suggests. 
+The previous results show that index scan underperforms at selectivities far below what the classic 10\% rule of thumb suggests. 
 The flaw in the conventional wisdom is that, when there are many tuples per page, the vast majority of \emph{pages} need to be retrieved even if only a few \emph{tuples} are accessed.
 When the 10\% rule is applied to page- rather than tuple-selectivity, the guideline is more reasonable.
 Yue \emph{et al.} provide an analytical formula for the expected number of pages retrieved given the size of the table, tuples per page, and selectivity \cite{Yue1975}, assuming tuples are randomly distributed among pages (a reasonable assumption given that each table can be clustered on only a single key).
@@ -104,7 +104,7 @@ When a page contains only a single tuple, clearly, the number of tuples and page
 However, as the number of tuples per page increases, the expectation on the number of pages that must be retrieved quickly approaches 100\% even at small selectivities.
 As a point of reference, given a 4kb page size and neglecting page headers, the Wisconsin Benchmark stores 19 tuples per page while TPC-H's Lineitem and Orders tables store 29 and 30 tuples per page, respectively.
 
-The implication of this result is that, for typical tuple sizes, the vast majority of a relation must be read even if the selectivity is but a few percent.
+The implication of this result is that, for typical tuple sizes, the vast majority of pages in a relation must be read even if the selectivity is but a few percent.
 Hence, with the exception of single-tuple lookups, there are few real-world scenarios where scan performance improves with better random access latency under conventional storage managers that access data in large blocks.
 To benefit from low access latency, future devices will need to provide random access at tuple (rather than page) granularity.
 Until such devices are available, relation and rowid-sort scans will dominate, with IO bandwidth primarily determining scan performance.
@@ -182,6 +182,16 @@ Indeed, the arguments made by Baumann are a key component of the intuition laid 
 However, the conclusion neglects the observations discussed in Section~\ref{sec:FlashOpti:Scans} demonstrating that queries selecting more than a handful of tuples will likely retrieve the majority of pages in a relation, and thus gain no advantage from fast random IO.
 Tsirogiannis introduces a join algorithm that retrieves only the join columns, joins these values, and then retrieves projected rows via a temporary index.
 By the previous argument, scanning for projected data should retrieve the majority of data pages, preferring a relation scan, and thus provide comparable advantage on disk and SSD.
+
+Finally, Bausch \emph{et al.} implement asymmetry-aware query optimization in PostgreSQL \cite{BauschPetrov12}.
+They calibrate and evaluate their system using the TPC-H benchmark and find substantial improvement.
+While their approach is sound, I believe their calibration and evaluation are skewed and lead to false conclusions (their results are insufficient to demonstrate that query optimizers should be SSD-aware).
+First, their results show that an external sort of unordered data results results in 95\% random read accesses to disk.
+This is indicative of poorly configured memory buffers; external soft algorithms should exhibit almost entirely sequential access patterns.
+Furthermore, the results of their calibration (shown in their appendix) differ substantially from expected physical traits.
+For example, the relative cost of disk's random accesses is only $6.8\times$ that of a sequential access, the relative cost of Flash's random read access is $5.6\times$ that of its sequential read access (nearly the same as the relative difference on disk), and Flash's sequential writes are roughly $2.5\times$ \emph{slower} than random writes (sequential writes should be faster).
+Using a physically-based model to optimize queries only makes sense if the model is accurate; the resulting calibration suggests that the models are inaccurate and results with physically derived calibration parameters should be shown instead.
+I believe the improvement shown is a function of (1) using total time of 21 queries as a metric instead of arithmetic or geometric mean (query 21 shows improvement of 549\% and has a greater runtime than most other queries), (2) using search-based calibration instead of physically derived optimization parameters (e.g., the cost of a disk seek should be measured directly from the disk, not by fitting the model), and (3) the asymmetric model has seven parameters versus the original model's five; these additional degrees of freedom allow more effective search-based calibration even when using an incorrect optimization model.
 
 \section{Conclusion}
 \label{sec:FlashOpti:Conclusion}
