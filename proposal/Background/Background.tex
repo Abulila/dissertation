@@ -135,19 +135,19 @@ Most commercial DBMS systems implement variants of at least three join algorithm
 At a high level, the nested-loop join iterates over the inner relation for each tuple of the outer relation; the sort-merge join sorts both relations and then performs concurrent scans of the sorted results; and the hybrid hash join forms in-memory hash tables of partitions of the inner relation and then probes these with tuples from the outer relation.
 
 The relative performance of these algorithms depends on a complex interplay of memory capacity, relation sizes, and the relative costs of random and sequential IOs.  
-One example performance model that captures this interplay was proposed by Haas and co-authors \cite{DBLP:journals/vldb/HaasCLS97}.
+One example performance model that captures this interplay was proposed by Haas \emph{et al.} \cite{DBLP:journals/vldb/HaasCLS97}.
 Their model estimates the number of disk seeks and the size of each data transfer and weights each by a cost based on assumed characteristics of the IO device.
 The model further identifies the optimal buffering strategy for the various phases of each join algorithm.
 Seek and random/sequential transfer times are central parameters of this model, suggesting that new technologies require new device-specific query optimization.
 
 As accessing large amounts of data on disk can limit system throughput, it is imperative that the query optimizer choose the best query plan.
 Typical query optimizers use data statistics to approximate query selectivity and cardinality as well as physically-based models to estimate the runtime of candidate query plans.
-Sections~\ref{sec:FlashOpti:Scans} and~\ref{sec:FlashOpti:Joins} will investigate when the query plan changes between disk and Flash, and what performance is lost when the incorrect decision is made (assuming disk but actually using Flash).
+Sections~\ref{sec:FlashOpti:Scans} and~\ref{sec:FlashOpti:Joins} will investigate when the query plan changes between disk and Flash, and what performance is lost when the incorrect decision is made (i.e., when assuming disk but actually using Flash).
 
 \section{Durable and Recoverable Transactions}
 \label{sec:Background:Recovery}
 
-Many database applications require transaction semantics commonly described as ACID (Atomic, Consistent, Isolated, Durable) \cite{Gray81}.
+Database applications typically provide transaction semantics described as ACID (Atomic, Consistent, Isolated, Durable) \cite{Gray81}.
 While the first three are primarily impacted by the database's concurrency control mechanisms within main memory, transaction durability and database recovery interacts with persistent storage.
 The goal of recovery management is to ensure that during normal transaction processing no transaction reports that it has committed and is later lost after a system failure, and that any transaction that fails to commit before a failure is completely removed (i.e., no partial updates remain).
 Additionally, recovery should occur as quickly as possible and allow efficient forward processing.
@@ -155,21 +155,21 @@ Several schemes provide correct, high performance recovery for disk.
 I describe ARIES \cite{MohanHaderle92}, a popular Write Ahead Logging (WAL) system that provides atomic durable transactions.
 
 \textbf{ARIES.}
-ARIES uses a two-level store (disk and volatile buffer cache) alongside a centralized log.
+ARIES uses a two-level store (disk and volatile buffer cache) alongside a shared persistent log.
 The buffer cache is necessary to accelerate reads and defer writes to the disk.
-Transaction writes coalesce in the buffer cache while being durably recorded in the log as ordered entries that describe page updates and actions, transforming random writes into sequential writes.
+Transaction writes coalesce in the buffer cache while being durably recorded in the log as ordered entries describing page updates and logical modifications, transforming random writes into sequential writes.
 
 The log improves disk write performance while simultaneously providing data recovery after failure.
 Transaction updates produce both redo and undo entries.
-Redo logs record actions performed on heap pages so that they can be replayed if data has not yet written to disk in-place.
+Redo logs record actions performed on heap pages so that they can be replayed in the event data has not yet written to disk in-place upon failure.
 Undo logs provide roll back operations necessary to remove aborted and uncommitted transaction updates during recovery.
 The database occasionally places a checkpoint in the log, marking the oldest update within the database still volatile in the buffer cache (and therefore where recovery must begin).
 Recovery replays the redo log from the most recent checkpoint to the log's end, reproducing the state at failure in the buffer cache; ARIES ``replays history," recovering the failed database.
 Afterwards, incomplete transactions are removed using the appropriate undo log entries.
 
-While a centralized log orders all database updates, the software additionally enforces that log entries are durable before heap pages write back for each operation.
+While a centralized log orders all database updates, the software additionally enforces that log entries are durable before corresponding buffer cache pages may write back.
 Transactions commit by generating a commit log entry, which must necessarily become durable after the transaction's other log entries (since the log writes to disk in order).
-This process guarantees that no transaction commits, or page writes back to disk, without a durable history of its modifications in the log.
+This process guarantees that no transaction commits, and no page writes back to disk, without a durable history of its modifications in the log.
 
 Though complex, ARIES improves database performance with disk.
 First, log writes appear as sequential accesses to disk, maximizing device throughput.
@@ -180,7 +180,7 @@ In this way ARIES is designed from the ground up to minimize the effect of large
 \section{Memory consistency models}
 \label{sec:Background:MemoryConsistency}
 
-This section provides a background on memory consistency models, outlining three models: Sequential Consistency (SC), Total Store Order (TSO), Relaxed Memory Order (RMO), and Release Consistency (RC).
+This section provides a background on memory consistency models, outlining four models: Sequential Consistency (SC), Total Store Order (TSO), Relaxed Memory Order (RMO), and Release Consistency (RC).
 Much of this discussion assumes that caches are completely coherent---that is, any two accesses to a cache line (by any core/thread) have a total order.
 Release Consistency may guarantee this property only for properly annotated programs.
 Other systems enforce cache coherence in hardware without annotation.
@@ -188,63 +188,62 @@ Other systems enforce cache coherence in hardware without annotation.
 Consistency models define the order of loads and stores observed by threads.
 While every thread observes its own execution in program order, it may appear that other threads execute out of order.
 Processors (and compilers) are generally free to reorder instructions to accelerate performance so long as they produce equivalent results assuming no shared memory accesses (single thread execution).
-Loads and stores that are independent from a single-threaded point of view may in fact interact with other threads.
+However, loads and stores that are independent from a single-threaded point of view may in fact interact with other threads.
 Reordering these memory accesses often results in unintended program behavior.
 
 Two popular solutions to this problem are to (1) force all threads to observe the loads and stores of other threads in a single globally defined order (SC) or (2) relax this guarantee, introducing memory barriers that allow the programmer to enforce a certain order when necessary (i.e., relax consistency).
-While relaxing consistency may provide higher performance, it places a greater burden on programmers to be aware of instruction reordering and correctly use memory barriers.
+While relaxing consistency may provide higher performance, it places a greater burden on programmers to be aware of possible instruction reordering and correctly use memory barriers.
+Synchronization is often provided by software libraries, shielding the average programmer from the complexities of memory consistency.
 
-The consistency model provides the programming abstraction and guarantees on observed memory orders that the programmer can expect.
+The consistency model provides guarantees on observed memory orders that the programmer can expect and mechanisms to enforce additional constraints.
 Implementations may momentarily violate the consistency model so long as no program is able to observe the violation.
 For example, implementations are free to \emph{speculate}, executing with relaxed consistency, and later determine whether consistency has been violated.
 When consistency is violated the implementation must rollback and re-execute memory instructions, providing the illusion that threads execute with strict consistency.
 
 \textbf{Sequential Consistency.}
 Sequential Consistency \cite{Lamport79} provides the most intuitive programming model, yet necessarily the worst performance (although modern techniques use speculation to improve performance).
-All loads and stores appear in a globally consistent order that is an interleaving of program order of all threads.
+All loads and stores appear in a globally consistent order that is an interleaving of program order from all threads.
 A popular view of SC is that memory switches between the various processors; only a single processor accesses memory at any single time.
-Additionally, many architectures define atomic Read-Modify-Write operations (RMW; e.g., compare-and-swap, atomic add).
-The programmer need not consider memory instructions reordering; barriers are unnecessary (compiler barriers must still be used).
+Additionally, many architectures define atomic Read-Modify-Write (RMW; e.g., compare-and-swap, atomic add) operations that perform several operations atomically.
+The programmer need not consider memory instructions reordering and therefore barriers are unnecessary (compiler barriers must still be used).
 
 \textbf{Total Store Order.}
 Total Store Order \cite{SPARCv9} provides greater performance than SC at the cost of requiring the programmer to insert memory barriers.
-Most memory operations in each thread are still observed to occur in program order: (1) stores may not reorder with other stores, (2) loads may not reorder with other loads, and (3) a store that occurs after a load may not reorder and appear to occur before that load.
-These rules guarantee that all stores occur in a globally consistent sequential order.
+Most memory operations are still observed to occur in program order from the perspective of other threads: (1) stores may not reorder with other stores, (2) loads may not reorder with other loads, and (3) a store that occurs after a load may not reorder and appear to bypass that load.
+%These rules guarantee that all stores occur in a globally consistent sequential order.
 However, loads that occur after a store in program order may reorder and bypass the store, appearing to occur before the store from the perspective of other processors.
-The justification for doing this is that stores are typically not on the application's critical path -- they simply write into the cache and do not result in delays.
-Loads, on the other hand, may stall due to cache misses.
-Executing loads as soon as possible minimizes delays.
+The rationale for doing so is that load execution is often on the application's critical path---executing a load only after all previous stores are visible additionally slows execution.
+Executing loads as soon as possible (before prior stores become visible) improves performance.
 
-The programmer is responsible for recognizing any code where allowing a load to bypass a store causes an incorrect result.
-A barrier is provided by the architecture for such cases to force all loads to delay until the store appears to other threads (or re-execute those loads if some other thread issues conflicting stores).
-RMW instructions act as as barrier, preventing memory operations from reordering.
+The programmer is responsible for recognizing any code where allowing a load to bypass a store allows incorrect behavior.
+A barrier is provided by the architecture for such cases to force loads to delay until previous stores become visible to other threads.
+Additionally, RMW instructions act as barriers, preventing memory operations from reordering around the RMW instruction.
 As concurrent programming commonly uses RMW operations, explicit memory barriers are rarely required in practice.
 
 \textbf{Relaxed Memory Order.}
 Relaxed Memory Order \cite{SPARCv9} further relaxes consistency, allowing stores and loads to reorder around each other.
-To enforce the intended behavior the programmer must use memory barriers to constrain memory operation order.
+To enforce the intended behavior the programmer must use memory barriers to constrain memory operation visibility.
 RMO barriers constrain (1) loads from reordering with other loads, (2) stores from reordering with other stores, (3) loads from bypassing stores, and (4) stores from bypassing loads.
-Any of these constraints may be enforced at a memory barrier.
-RMO requires frequent barriers for correct thread communication.
+These constraints are enforced separately and explicitly.
+RMO requires frequent barriers for correct thread communication and is considerably more difficult to program with.
 
 \textbf{Release Consistency.}
 Release Consistency \cite{GharachorlooLenoski90} provides a relaxed consistency model with two barriers -- acquire and release.
-In the absence of barriers threads may observe memory operations in any order and may read stale data (some other processor wrote to an address but an older value is loaded).
+In the absence of barriers threads may observe memory operations in any order and may read stale data (loading an old value when some other processor has recently written to the same address).
 Before reading shared memory an \emph{acquire} barrier must be used to label the access as an acquire event.
-Similarly, after writing to shared memory a \emph{release} barrier is used; acquire and release used as a pair ensure that written data is observed by other processors.
+Similarly, after writing to shared memory a \emph{release} barrier is used to make the updates visible to other processors; acquire and release used as a pair ensure proper synchronization between communicating threads.
 Additionally, acquire and release barriers prevent memory operations from reordering (for example, to ensure that operations in a critical section occur only after the lock is acquired and before the lock is released).
 RMW operations implicitly contain both acquire and release barriers.
 
-Release Consistency improves performance by (1) relaxing all consistency guarantees for single threaded code, (2) providing precise memory barriers, and (3) enforcing cache coherence only at barriers.
-Acquire and release barriers order only certain types of accesses, leaving other accesses unconstrained.
-However, release consistency requires the programmer to be aware of and understand these persist barriers.
+Release Consistency improves performance by (1) allowing maximum instruction reordering for unannotated single threaded code, (2) providing precise memory barriers, introducing the minimal number of ordering constraints to provide the intended behavior, and (3) enforcing cache coherence only at barriers, allowing simpler cache coherence hardware.
+However, release consistency requires the programmer to be aware of and understand these barriers.
 
-A similar trade-off exists for enforcing data persistence---Persistence constraints are relaxed so that persist order may not match program order and may not appear as a valid interleaving of all persists.
-Removing NVRAM write constraints improves performance while still providing mechanisms to enforce expected behavior.
-The interaction between persistence, performance, and programmability is explored in Chapter~\ref{chap:Persistency}.
+A similar trade-off exists for enforcing data persistence---the order in which data becomes persistent may be relaxed and deviate from program order stores.
+Removing NVRAM write constraints improves performance, yet mechanisms must be provided to enforce expected behavior.
+The interaction between persistence, performance, and ease of programming is explored in Chapter~\ref{chap:Persistency}.
 
 \section{Conclusion}
 \label{sec:Background:Conclusion}
 
-This chapter provides a brief history and outline of storage devices, database technologies, and memory consistency interfaces.
-The remainder of thesis builds on these ideas to explore how best to use NVRAM in future memory systems.
+This chapter provides a brief history and outline of storage devices, database technologies, and memory consistency.
+The remainder of thesis builds on these ideas to explore how best to use NVRAM in future storage systems.
