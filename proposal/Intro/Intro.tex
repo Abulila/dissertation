@@ -60,8 +60,8 @@ I consider an NVRAM access model where correct ordering of persistent writes is 
 
 To address these challenges I investigate accelerating NVRAM reads with various cache architectures and capacities, and avoid persist barrier delays by introducing a new recovery mechanism, \GroupCommit.
 Database designs are discussed in Chapter~\ref{chap:OLTP_design}.
-As expected, low latency memory-bus-connected NVRAM needs little additional caching (on-chip caches suffice) and that updating data in-place is a simple and viable recovery strategy.
-However, long latency NVRAM and complex interconnects (e.g., Non-Uniform Memory Architectures -- NUMA, PCIe-attached NVRAM, or distributed storage) benefit from DRAM caching and \GroupCommit to improve throughput.
+As expected, low latency memory-bus-connected NVRAM needs little additional caching (on-chip caches suffice) and updating data in-place is a simple and viable recovery strategy.
+However, long latency NVRAM and complex interconnects (e.g., Non-Uniform Memory Architectures -- NUMA, PCIe-attached NVRAM, or distributed storage) benefit from DRAM caching and \GroupCommit, improving throughput.
 I investigate specifically how NVRAM read and persist barrier latencies drive OLTP system design.
 These results and additional evaluations are presented in Chapter~\ref{chap:OLTP_eval}.
 This work was originally published at VLDB \cite{Pelley13}.
@@ -76,29 +76,29 @@ Memory consistency may be relaxed, allowing communicating threads to each observ
 Such memory consistency models improve performance, but require complex reasoning and additional programming mechanisms (memory barriers) to ensure expected behavior.
 Memory models are described in Section~\ref{sec:Background:MemoryConsistency}.
 
-Similarly, NVRAM write order may be relaxed, improving performance by allowing writes to occur in parallel or out of order.
+Similarly, NVRAM write order may be relaxed, improving performance by allowing writes to occur in parallel or out of order while still ensuring correct recovery.
 I introduce \emph{memory persistency}, a framework that extends memory consistency, to reason about NVRAM write order.
 Relaxed memory persistency models use persist barriers to enforce specific write orders, guaranteeing that data is correctly recovered after failure.
-I define memory persistency and enumerate the possible design space in Chapter~\ref{chap:Persistency}
-Interestingly, persistent memory consistency models may be de-coupled from the underlying memory consistency model, separately enforcing the order in which writes becomes durable and the order in which writes become visible to other threads.
+I define memory persistency and enumerate the possible design space in Chapter~\ref{chap:Persistency}.
+Interestingly, memory persistency models may be de-coupled from the underlying memory consistency models, separately enforcing the order in which writes become durable and the order in which writes become visible to other threads.
 I introduce a persistent queue benchmark and several memory persistency models in Chapter~\ref{chap:PersistencyModels}.
-Finally, I evaluate these models using the persistent queue in Chapter~\ref{chap:PersistencyEval}.
+Finally, I evaluate these models in Chapter~\ref{chap:PersistencyEval}.
 Strict persistency models slow execution nearly $30\times$ relative to existing throughput on volatile, nonrecoverable systems.
 Relaxed persistency models regain lost throughput by improving NVRAM write concurrency.
 
 \section{Data Center Infrastructure}
 \label{sec:Intro:Additional}
-The primary themes of this thesis include performance, cost efficiency, and reliability.
+The themes of this thesis include performance, cost efficiency, and reliability.
 While I focus on storage architectures, I additionally published work regarding the cost and reliability of data center infrastructure.
 Appendix~\ref{app:WEED} contains ``Understanding and Abstracting Total Data Center Power," published at WEED 2009 \cite{PelleyMeisner09}.
 This work presents power/energy models for all aspects of the data center, including power distribution, battery backups, cooling infrastructure, and IT equipment.
 Appendix~\ref{app:PowerRouting} contains ``PowerRouting: Dynamic Power Provisioning for the Data Center," published at ASPLOS 2010 \cite{PelleyMeisner10}.
-PowerRouting distributes power distribution responsibility throughout the data center to minimize installed power infrastructure capacity while maintaining reliability, minimizing data center cost.
+PowerRouting spreads power distribution responsibility throughout the data center to minimize installed power infrastructure capacity while maintaining reliability, minimizing data center cost.
 The key insight is that data centers typically over-provision infrastructure, resulting in under-utilized (and often unnecessary) equipment.
 PowerRouting leverages compute-specific knowledge of the IT workload to more effectively utilize power infrastructure.
 Both of these works are included without modification.
 
-During this investigation I discovered that, in many regards, industry is well ahead of academia at decreasing operating costs and improving infrastructure efficiency.
+During my investigations I discovered that, in many regards, industry is superior to academia at decreasing operating costs and improving infrastructure efficiency.
 As such, the opportunity to contribute meaningful new techniques to improve infrastructure is rapidly diminishing.
 Recognizing storage and memory as primary concerns for energy efficiency, reliability, and cost, I focus on new and emerging storage technologies in this dissertation.
 
@@ -112,4 +112,4 @@ In Chapter~\ref{chap:OLTP_design} I describe potential software designs for OLTP
 Chapter~\ref{chap:OLTP_eval} details a methodology to evaluate NVRAM (devices not readily available) on modern hardware and evaluates several aspects of OLTP running on NVRAM.
 Chapter\ref{chap:Persistency} introduces and defines memory persistency.
 Specific memory persistency models and a persistent queue data structure are proposed in Chapter~\ref{chap:PersistencyModels}.
-Finally, I evaluate memory persistency models in Chapter~\ref{chap:PersistencyEval}.
+Finally, I evaluate these memory persistency models in Chapter~\ref{chap:PersistencyEval}.

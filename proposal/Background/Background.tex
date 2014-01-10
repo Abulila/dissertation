@@ -1,7 +1,7 @@
 This chapter provides details necessary to understand the investigations and experiments in this thesis.
 I focus on storage technologies, database analytics optimization, database transaction processing optimizations, and memory consistency models.
-The purpose of discussing database optimizations is to understand the complications that arise when using disk, and how these will interact with new storage technologies.
-Memory consistency forms the foundation for memory persistency.
+The purpose of discussing database optimizations is to understand the complications that arise when using disk, and how resulting mechanisms interact with new storage technologies.
+Additionally, memory consistency forms the foundation for memory persistency.
 
 \section{Storage Technologies}
 \label{sec:Background:Storage}
@@ -20,12 +20,12 @@ Once the head settles, it may read or write data as the platter rotates and the 
 Disk capacity increases with the areal size and number of platters, as well as areal density (placing more sectors and tracks within the same area).
 Because capacity has scaled so well (and continues to), disk remains the lowest cost technology for large datasets and persistent storage.
 
-While dominant, disk exhibits relatively slow access and undesirable access behavior \cite{RuemmlerWilkes94}.
+While popular and inexpensive, disk suffers relatively slow access and undesirable access behavior \cite{RuemmlerWilkes94}.
 Rotational speed limits the rate that data transfers to or from the disk.
 Further, random reads and writes must first seek to the proper track and then wait until the correct sector reaches the head, a process which takes several ms.
 Table~\ref{table:DiskCharacteristics} lists the measured performance characteristics of an enterprise disk (2011).
 This disk achieves nearly 120 MB/s sequential transfers, but random reads take an average of 10ms (only 50 KB/s for 512-byte sectors).
-As a result, there is a large history of optimization for disk-resident storage, as I discuss later in Section~\ref{sec:Background:Recovery}.
+As a result, there is a large history of optimization for disk-resident storage, as I discuss in Section~\ref{sec:Background:Recovery}.
 
 \subsection{Flash Memory}
 \label{sec:Background:Storage:Flash}
@@ -33,11 +33,11 @@ Driven by the popularity of mobile devices, Flash memory has quickly improved in
 Unlike conventional rotating hard disks, which store data using magnetic materials, Flash stores charge on a floating-gate transistor forming a memory cell.
 These transistors are arranged in arrays resembling NAND logic gates, after which the ``NAND Flash'' technology is named.
 This layout gives NAND Flash a high storage density relative to other memory technologies.
-Though dense, the layout sacrifices byte addressability and some read latency---an entire array (a.k.a. page, typically 2KB to 4KB) must be read in a single operation---making NAND Flash more appropriate for block-oriented IO than as a direct replacement for RAM.  
+Though dense, the layout allows only coarse-grained access and sacrifices read latency---an entire array (a.k.a. page, typically 2KB to 4KB) must be read in a single operation---making NAND Flash more appropriate for block-oriented IO than as a direct replacement for RAM.  
 
 One of the difficulties of Flash devices is that a cell can be more easily programmed (by adding electrons to the floating gate) than erased (removing these electrons).  
 Erase operations require both greater energy and latency, and typically can be applied only at coarse granularity (e.g., over blocks of 128KB to 512KB).
-Moreover, repeated erase operations cause the Flash cell to wear out over time, limiting the maximum lifetime of the cell (e.g., to $10^5$ to $10^6$ writes \cite{Roberts2009}).  
+Moreover, repeated erase operations cause the Flash cell to wear out over time, limiting cell lifetime (e.g., to $10^5$ to $10^6$ writes \cite{Roberts2009}).  
 Recent Flash devices further increase storage density by using several distinct charge values to represent multiple bits in a single cell at the cost of slower accesses and even shorter lifetimes.
 
 A Flash-based SSD wraps an array of underlying Flash memory chips with a controller that manages capacity allocation, mapping, and wear leveling across the individual Flash devices.  
@@ -63,7 +63,7 @@ Storage capacity increases by storing more than two states per cell in Multi-lev
 While it remains unclear which of these technologies will eventually gain traction, many share common characteristics.
 In particular, NVRAMs will likely provide somewhat higher access latency relative to DRAM.
 Furthermore, several technologies are expected to have asymmetric read-write latencies, where writing to the device may take several microseconds \cite{QureshiSrinivasan09}.
-Write latency worsens with MLC, where slow, iterative writes are necessary to reliably write to a cell.
+Write latency worsens with MLC, where slow, iterative writes are necessary to reliably write to cells.
 
 Similarly to Flash, resistive NVRAM technologies suffer from limited write endurance; cells may be written reliably a limited number of times.
 While write endurance is an important consideration, proposed hardware mechanisms (e.g., Start-Gap \cite{QureshiKaridis09}) are effective in distributing writes across cells, mitigating write endurance concerns.
@@ -82,14 +82,15 @@ However, Moneta retains a block interface.
 Condit \emph{et al.} suggest that NVRAM connect directly to the memory bus, with additional hardware and software mechanisms providing file system access and consistency \cite{ConditNightingale09}.
 I later adopt the same atomic eight-byte persistent write, enabling small, safe writes even in the face of failure.
 NVRAM will eventually connect via a memory interface, but it is unclear how storage technologies will evolve or what their exact performance characteristics will be.
+Instead of assuming specific NVRAM technologies and interconnects, I measure the affect that NVRAM performance (both latency and bandwidth) has on workload throughput.
 
 \section{Analytics Optimization}
 \label{sec:Background:Analytics}
 
 Large scale data processing requires efficient use of storage devices.
 Relational data is stored in tables (relations).
-Tables contains lists of rows (tuples), each containing values for the different columns (attributes) defined on the table.
-I discuss two important operators within the relational model most affected by Flash's performance characteristics: scans and joins.
+Tables are a collection of rows (tuples), each row containing values for the different columns (attributes) defined on the table.
+I discuss two important operations common to the relational model that are expected to be affected by Flash's performance characteristics: scans and joins.
 
 \subsection{Scans}
 \label{sec:Background:Scans}
@@ -99,31 +100,31 @@ The goal is to select all relevant rows from the table while retrieving the fewe
 Work on access path selection dates back to the late 1970s \cite{Selinger1979}.
 
 There are two classic scan operators implemented by nearly all commercial DBMS systems: relation scan and index scan.
-An index is a database data structure that maps column values to rows within a table, supporting fast look-ups.
+An index is a database data structure that maps column values to rows within a table, supporting fast look-ups by that column.
 Indexes may be ordered (as in an in-memory balanced tree or disk-resident B-Tree) to efficiently retrieve all rows satisfying a range query (e.g., an ordered index on ``last name" would accelerate a query asking for all people whose last name is between ``Pelley" and ``Wenisch").
 Additionally, indexes may be clustered (the primary table is stored in sorted/hashed order and supports searching) or non-clustered (the index is separate from the primary store and contains references to rows).
-A table can only be ordered according to one key, limiting the use of clustered indexes.
+A table can only be physically ordered according to one key, limiting the use of clustered indexes.
 Database indexes are themselves stored on disk.
 Many types of indexes exist, but all provide a more direct way to filter specific data than scanning an entire data set.
 
 When no indexes are available, the only choice is to perform a \emph{relation scan}, where all data pages in the table are read from disk and scanned tuple-by-tuple to select tuples that satisfy the query.
 When a relevant index is available, the DBMS may instead choose to perform an \emph{index scan}, where the execution engine traverses the relevant portion of the index and fetches only pages containing selected tuples as needed.
 For clustered indexes (i.e., the row itself exists within the index, and all rows are sorted according to the index key), an index scan is nearly always the preferred access path, regardless of the underlying storage device.  
-For non-clustered indexes, whether the optimizer should choose a relation scan or index scan depends on the selectivity of the query; relation scans have roughly constant cost regardless of selectivity (cost depends on table size), whereas index scan costs grow approximately linearly with selectivity.
+For non-clustered indexes, whether the optimizer should choose a relation scan or index scan depends on the selectivity of the query (expected number of rows that satisfy the query); relation scans have roughly constant cost regardless of selectivity (cost depends on table size), whereas index scan costs grow approximately linearly with selectivity.
 When selectivity is low, the index scan provides greater performance because it minimizes the total amount of data that must be transferred from disk.
-However, as selectivity increases, the fixed-cost relation scan becomes the faster option.  
+However, as selectivity increases, the fixed-cost (and simpler) relation scan becomes the faster option.  
 Though the relation scan reads the entire table, it can do so using sequential rather than random IO, leveraging the better sequential IO performance of rotating hard disks.
 A classic rule of thumb for access path selection is to choose a relation scan once selectivity exceeds ten percent \cite{RamakrishnanAndGehrke}.
 
 Recent databases implement a third, hybrid scan operator, which I call \emph{rowid-sort scan}.
 In this scan operator, the unclustered index is scanned to identify relevant tuples.
-However, rather than immediately fetching the underlying data pages, the rowid of each tuple is stored in a temporary table, which is then sorted at the end of the index scan.
+However, rather than immediately fetching the underlying data pages, the rowid (a unique identifier that signifies the row's page and offset within that page) of each tuple is stored in a temporary table, which is then sorted at the end of the index scan.
 Then, the pages identified in the temporary table are fetched in order, and relevant tuples are returned from the page.
 The rowid-sort scan has the advantage that each data page will be fetched from disk only once, even if multiple relevant tuples are located on the page. 
-My description fits the query plan explanation provided by IBM's DB2.
+Rowid-sort scan is provided by IBM's DB2, although they may refer to it by a different name.
 Other databases use different terminology or algorithms to ensure that each heap page is fetched exactly once (for example, PostgreSQL uses a bitmap index, sorting the list of pages with tuples that satisfy the query \cite{PostgresLossyBitMap}).
 Rowid-sort scan is the optimal access path for intermediate selectivities.
-Section~\ref{sec:FlashOpti:Scans} investigates when optimal access path selection changes between disk and Flash.
+Section~\ref{sec:FlashOpti:Scans} investigates choosing an optimal access path depending on whether data resides on disk or Flash.
 
 \subsection{Joins}
 \label{sec:Background:Joins}
