@@ -17,7 +17,7 @@ The queue must recover after failure, preserving proper entry values and order.
 The goal in designing a persistent queue is to improve the persist concurrency of insert operations both through improved thread concurrency and relaxed persistency.
 All designs are concurrent (thread-safe) but allow varying degrees of persist concurrency.
 Additionally, the three designs are fashioned as circular buffers, containing a data segment and head and tail pointers.
-Psuedo-code for the three designs is shown in Algorithm~\ref{Alg::Queue}.
+Psuedo-code for the three designs is shown in Figure~\ref{Alg::Queue}.
 I outline their execution, recovery, and the minimal necessary persist dependences.
 
 \input{PersistencyModels/Alg.Queue}
@@ -34,7 +34,7 @@ Additionally, a volatile \emph{insert list} is maintained to detect when insert 
 \input{PersistencyModels/Fig.CWL_dependences}
 
 Both queue designs use the persistency model to prevent persists to the head pointer from occurring before persists to the data segment for each insert operation.
-Algorithm~\ref{Alg::Queue} includes barriers for two different persistency models (described later in Section~\ref{sec:PersistencyModels:Models}).
+Figure~\ref{Alg::Queue} includes barriers for two different persistency models (described later in Section~\ref{sec:PersistencyModels:Models}).
 Additionally, persist dependences (and unnecessary constraints introduced by strict persistency models) are shown in Figure~\ref{fig::CWL_dependences}.
 Recovery requires that persists to the head pointer are ordered after persists to the data segment from the same insert operation and persists to the head pointer occur in insert-order to prevent holes in the queue (persists to the head pointer may coalesce so long as no ordering constraint is violated).
 All other persists within the same insert operation and between operations may correctly be concurrent.
@@ -177,7 +177,7 @@ Lock operations occur in the same epoch as the first persists of the insert oper
 \emph{Copy While Locked} and \emph{Queue Holes} retain recovery correctness by still ordering all persists to the head marker (persists will occur according to cache coherence order).
 As a result, persists protected by a lock now occur concurrently.
 
-Algorithm~\ref{Alg::Queue} demonstrates how to use epoch persistency's barriers (shown in the code as $PersistBarrier$) within our queue designs.
+Figure~\ref{Alg::Queue} demonstrates how to use epoch persistency's barriers (shown in the code as $PersistBarrier$) within our queue designs.
 The constraints in Figures~\ref{fig::CWL_dependences} and~\ref{fig::holes_dependences} annotated with ``A" are removed under epoch persistency relative to strict persistency.
 
 \textbf{Implementation.}
@@ -223,7 +223,7 @@ Recent trends suggest that such a relaxed consistency model is unnecessary for t
 \textbf{Persist Performance.}
 Our persistent queue implementations place each insert task in a separate persist strand.
 The result is that all unnecessary persist constraints are removed, including constraints between inserts from the same thread.
-Algorithm~\ref{Alg::Queue} includes the necessary strand persistency annotations ($NewStrand$ and $PersistBarrier$).
+Figure~\ref{Alg::Queue} includes the necessary strand persistency annotations ($NewStrand$ and $PersistBarrier$).
 All unnecessary constraints from Figures~\ref{fig::CWL_dependences} and~\ref{fig::holes_dependences} are removed; those removed in moving from epoch persistency to strand persistency are labeled ``B."
 The required persist dependences (and only those required for correct recovery) remain, maximizing persist concurrency.
 

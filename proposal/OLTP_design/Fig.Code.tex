@@ -10,7 +10,7 @@
       \State $nvram\_log.$\Call{insert\_body}{$entry$} \Comment{no LSN}
     \EndFor
     \State \Call{persist\_barrier}{$ $}
-    \State $nvram\_log.$\Call{update\_lsns}{$ $}
+    \State $nvram\_log.$\Call{update\_lsns}{$ $} \Comment{for all entries}
     \State \Call{persist\_barrier}{$ $}
   \EndFunction
   %\State
