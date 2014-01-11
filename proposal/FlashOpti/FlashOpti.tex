@@ -1,7 +1,7 @@
 This chapter asks if database query optimizers must be SSD-aware.
 The work was published in the Second International Workshop on Accelerating Data Management Systems Using Modern Processor and Storage Architectures (AMDS 2011), collocated with VLDB \cite{PelleyWenisch11}.
 I worked on this project with my advisor, Thomas F. Wenisch, and assistant professor Kristen LeFevre.
-Refer to Sections~\ref{sec:Background:Storage} and~\ref{sec:Background:Analytics} for necessary background on this topic.
+Refer to Sections~\ref{sec:Background:Storage} and~\ref{sec:Background:Analytics} for background on storage technologies and query optimization.
 
 \section{Introduction}
 \label{sec:FlashOpti:Intro}
@@ -25,7 +25,7 @@ Furthermore, as SSDs change the relative costs of computation, sequential, and r
 My original intent was to leverage this idea to 1) improve query optimization by making device-specific decisions, and 2) accelerate database analytics and reduce operating costs by intelligently placing data on different devices.
 While Flash is faster than disk, it is generally more expensive per equal capacity.
 It makes sense to place small amounts of frequently accessed data on Flash, and the rest on disk.
-Furthermore some data ``prefers" to live on Flash as it is accessed in ways that Flash can take advantage of (e.g., queries typically access this data in selectivities or join types that prefer Flash).
+Furthermore some data ``prefers" to live on Flash as it is naturally accessed in ways that Flash holds a competitive advantage over disk (e.g., queries typically access this data in selectivities or join types that prefer Flash).
 
 Despite this intuition, my empirical investigation using a commercial DBMS finds \emph{it is not necessary to make any adjustments to the query optimizer when moving data from disk to Flash}---an SSD-oblivious optimizer generally makes effective choices.
 I demonstrate this result, and explore why it is the case, in two steps.
@@ -51,7 +51,7 @@ In other words, I am trying to discover, empirically, cases where an access path
 I carry out this empirical investigation using IBM DB2 Enterprise Server Edition version 9.7.
 Experiments use the Wisconsin Benchmark schema \cite{Bitton83benchmarkingdatabase} to provide a simple, well-documented dataset on which to perform scans and joins.
 Though this benchmark does not represent a particular real-world application, modeling a full application is not my intent.
-Rather, the Wisconsin Benchmark's uniformly distributed fields allows us to control precisely the selectivity of each query.
+Rather, the Wisconsin Benchmark's uniformly distributed fields allow precise control over query selectivity.
 Whereas real world queries are more complicated than the simple scans and joins studied here, these simple microbenchmarks reveal the underlying differences between the storage devices and scan/join algorithms most clearly.
 Alternative ``real world" benchmarks (namely TPC-H \cite{TPCH}) complicate matters, making it difficult to discern why different query plans prefer disk or SSD.
 I aggregate results of all queries to avoid materializing output tables as I am primarily interested in isolating other database operations; typically all results must be materialized regardless of device, so I remove this step to provide a better comparison.
@@ -60,7 +60,7 @@ Both the hard disk and SSD were new at the beginning of the experiments.
 While other work has shown that SSD performance may degrade over the lifetime of the device I did not observe any change in performance.
 
 Note that I am not concerned with the optimization decisions that DB2 presently makes for either disk or SSD; rather, I am seeking to determine the ground truth of which algorithm a correct optimizer should prefer for each storage device. 
-In general, multiple query plans are achieved by varying the optimizers inputs -- disk random and sequential access latencies.
+In general, multiple query plans are achieved by varying the optimizers inputs---disk random and sequential access latencies.
 Databases often have planner hints to select specific plans (for example, DB2's optimization profiles).
 
 \section{Scan Analysis}
@@ -87,8 +87,8 @@ Both crossover points shift in the expected directions.
 The slope of the index scan curve is considerably shallower, and the break-even with the relation scan shifts above 0.5\% selectivity.  
 Furthermore, the range in which rowid-sort scan is optimal becomes narrower.
 Nevertheless, the key take-away is that the range of selectivities for which the optimal scan \emph{differs} across SSD and Disk is vanishingly small.
-Only a minute fraction of queries fit into this range, and those that make the incorrect decision (between disk and Flash) see a small performance impact.
-Hence, it is unnecessary for the optimizer to be SSD-aware to choose the correct scan operation.
+Only a minute fraction of queries fit into this range, and queries that make the incorrect decision (between disk and Flash) see a small performance impact.
+Hence, it is unnecessary for the optimizer to be SSD-aware to choose an effective scan operation.
 
 Whereas these measurements demonstrate my main result, they do not explain why index scans fail to leverage the random access advantage of Flash.  
 I turn to this question next. 
@@ -124,18 +124,18 @@ I therefore restrict the investigation to a comparison of sort-merge and hybrid 
 When a clustered index exists for a particular scan or join this index should almost always be used, regardless of the nature of the storage device.  
 Hence, I do not include clustered indexes in my analysis.
 Furthermore, I evaluate only ad hoc joins.
-When indexes are available, the choice of whether or not to use the index is analogous to the choice of which scan operator to use for a simple select query, which is covered by the analysis of scans.
+When indexes are available, the choice of whether or not to use the index is analogous to the choice of which scan operator to use for a simple select query, which is covered by the previous analysis of scans.
 
 Because of the complex interplay between available memory capacity and relation sizes for join optimization \cite{DBLP:journals/vldb/HaasCLS97}, I do not have a specific expectation that one join algorithm will universally outperform another on Flash SSD as opposed to disk.
-Rather, I perform a cross-product of experiments over a wide spectrum of relation sizes and output projectivities using the Wisconsin Benchmark database.  
-Haas's model demonstrates the importance of the relative sizes of input relations and main memory capacity on join performance; hence I explore a spectrum from joins that are only slightly larger than available memory (joining two 1.9GB tables) to those that are an order of magnitude larger (joining two 9.7GB tables).   
+Rather, I perform a cross-product of experiments over a spectrum of relation sizes and output projectivities using the Wisconsin Benchmark database.  
+Haas's model demonstrates the importance of the relative sizes of input relations and main memory capacity on join performance; hence I explore a range of joins that are only slightly larger than available memory (joining two 1.9GB tables) to those that are an order of magnitude larger (joining two 9.7GB tables).   
 I vary projectivity, having discovered empirically that it significantly impacts the optimal join algorithm on disk, as it has a strong influence on partition size in hybrid hash joins.
 I execute queries with two projectivities: approximately 5\% (achieved by selecting all the integer fields in the Wisconsin Benchmark schema), and approximately 25\% (selecting an integer field and one of the three strings in the schema).
 In all experiments, I perform an equijoin on an integer field, and use an aggregation operator to avoid materializing the output.
 
 \input{FlashOpti/fig.runtime.tex}
 
-I report results in graphical form in Figure~\ref{figure::joins} and absolute runtimes in Table~\ref{table::joins}.
+I report results in graphical form in Figure~\ref{figure::joins} and absolute run times in Table~\ref{table::joins}.
 In Figure~\ref{figure::joins}, each group of bars shows the relative performance of sort-merge and hybrid hash joins on disk (darker bars) and Flash SSD (lighter bars), normalized to sort-merge performance on disk.
 Lower bars indicate higher performance.
 I provide the same data in tabular form to illustrate the runtime scaling trends with respect to relation size, which are obscured by the normalization in the graph.
@@ -175,7 +175,7 @@ Yin \emph{et al.} and Li \emph{et al.} present new index structures, focusing on
 Baumann \emph{et al.} investigate Flash's performance alongside a hybrid row-column store referred to as ``Grouping" \cite{Baumann2010}.
 Similarly, Tsirogiannis \emph{et al.} use a column store motivated by the PAX layout to create faster scans and joins \cite{Tsirogiannis2009}.
 
-Interestingly, my findings contradict recommendations of these last two studies.
+Interestingly, my findings contradict recommendations from many of these studies.
 Baumann concludes that SSDs shift optimal query execution towards index-based query plans.
 The study bases this conclusion on the observation that asynchronous random reads on Flash are nearly as fast as sequential reads.
 Indeed, the arguments made by Baumann are a key component of the intuition laid out in Section~\ref{sec:FlashOpti:Intro} that led me to expect a need for SSD-aware query optimization.
@@ -185,13 +185,14 @@ By the previous argument, scanning for projected data should retrieve the majori
 
 Finally, Bausch \emph{et al.} implement asymmetry-aware query optimization in PostgreSQL \cite{BauschPetrov12}.
 They calibrate and evaluate their system using the TPC-H benchmark and find substantial improvement.
-While their approach is sound, I believe their calibration and evaluation are skewed and lead to false conclusions (their results are insufficient to demonstrate that query optimizers should be SSD-aware).
+However, I believe their calibration and evaluation are skewed and lead to false conclusions (their results are insufficient to demonstrate that query optimizers should be SSD-aware).
 First, their results show that an external sort of unordered data results results in 95\% random read accesses to disk.
 This is indicative of poorly configured memory buffers; external soft algorithms should exhibit almost entirely sequential access patterns.
 Furthermore, the results of their calibration (shown in their appendix) differ substantially from expected physical traits.
-For example, the relative cost of disk's random accesses is only $6.8\times$ that of a sequential access, the relative cost of Flash's random read access is $5.6\times$ that of its sequential read access (nearly the same as the relative difference on disk), and Flash's sequential writes are roughly $2.5\times$ \emph{slower} than random writes (sequential writes should be faster).
-Using a physically-based model to optimize queries only makes sense if the model is accurate; the resulting calibration suggests that the models are inaccurate and results with physically derived calibration parameters should be shown instead.
-I believe the improvement shown is a function of (1) using total time of 21 queries as a metric instead of arithmetic or geometric mean (query 21 shows improvement of 549\% and has a greater runtime than most other queries), (2) using search-based calibration instead of physically derived optimization parameters (e.g., the cost of a disk seek should be measured directly from the disk, not by fitting the model), and (3) the asymmetric model has seven parameters versus the original model's five; these additional degrees of freedom allow more effective search-based calibration even when using an incorrect optimization model.
+For example, the relative cost of disk's random access is only $6.8\times$ that of a sequential access, the relative cost of Flash's random read access is $5.6\times$ that of its sequential read access (nearly the same as the relative difference on disk), and Flash's sequential writes are roughly $2.5\times$ \emph{slower} than random writes (sequential writes should be faster).
+Using a physically-based model only makes sense if the model is accurate.
+I believe the improvement shown is a function of (1) using the total time of 21 queries as the performance and calibration metric instead of arithmetic or geometric mean (query 21 shows improvement of 549\% and has a greater runtime than most other queries), (2) using search-based calibration instead of physically derived optimization parameters (e.g., the cost of a disk seek should be measured directly from the disk, not by fitting the model), and (3) the asymmetric model has seven parameters versus the original model's five; these additional degrees of freedom allow more effective search-based calibration even when using an incorrect optimization model.
+I believe that my work demonstrates fundamental principles suggesting that query optimization sees little benefit from SSD-awareness.
 
 \section{Conclusion}
 \label{sec:FlashOpti:Conclusion}
@@ -199,6 +200,6 @@ Flash-based solid state disks provide an exciting new high-performance alternati
 My investigation of SSD-aware query optimization was motivated by a hope that the drastically improved random IO performance on SSDs would result in a large shift in optimal query plans relative to existing optimizations.
 At a minimum, I expected that constants capturing relative IO costs in the optimizer would require update.
 This chapter presented evidence that refutes this expectation, instead showing that an SSD-oblivious query optimizer is unlikely to make significant errors in choosing access paths or join algorithms.
-Specifically, I demonstrate both empirically and analytically that the range of selectivities for which a scan operation can benefit from SSDs' fast random reads is so narrow that it is inconsequential in practice.
+Specifically, I demonstrated both empirically and analytically that the range of selectivities for which a scan operation can benefit from SSDs' fast random reads is so narrow that it is inconsequential in practice.
 Moreover, measurements of alternative join algorithms reveal that their performance variability is far smaller on SSDs and is dwarfed by the 5\texttimes~to 6\texttimes~performance boost of shifting data to SSD. 
 Overall, I conclude that the small and inconsistent performance gains available by making query optimizers SSD-aware are not worth the effort.
