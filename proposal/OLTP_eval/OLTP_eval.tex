@@ -6,7 +6,7 @@ I introduce a methodology for evaluating database performance with upcoming NVRA
 
 This section details the methodology for benchmarking transaction processing and modeling NVRAM performance.
 Experiments use the Shore-MT storage manager \cite{JohnsonPandis09}, including the high performance, scalable WAL implementation provided by Aether \cite{JohnsonPandis10}.
-While Aether provides a distributed log suitable for multi-socket servers, the distributed log exists as a fork of the main Shore-MT project.
+While Aether additionally provides a distributed log suitable for multi-socket servers, the distributed log exists as a fork of the main Shore-MT project.
 Instead, I limit experiments to a single CPU socket to provide a fair comparison between WAL and other recovery schemes, enforced using the Linux \emph{taskset} utility.
 Experiments place both the Shore-MT log and volume files on an in-memory \emph{tmpfs}, and provide sufficiently large buffer caches such that all pages hit in the cache after warmup.
 The intent is to allow the database to perform data accesses at DRAM speed and introduce additional delays to model NVRAM performance.
@@ -46,7 +46,7 @@ $$delay(intended) = a \times floor(intended / a + b) + c$$
 which results in an $R^2$ of .997 and the following parameter values: $a = 12.5$, $b=.434$, and $c=10.1$.
 This indicates that each iteration takes 12.5ns.
 
-As delays can only be introduced in steps I subtract 9.3ns from the intended delay to match the intended delay to the closest step.
+As delays can only be introduced in steps I subtract 9.3ns from the intended delay to match to the closest step.
 The resulting delay is within 6.25ns of the intended delay.
 However, a given delay contains a constant skew (for example, an intended delay of 30ns always results in a 35ns delay).
 As NVRAM persist latencies are expected to be in the hundreds of ns or greater, such error will negligibly affect my results.
@@ -64,14 +64,14 @@ This technique models reservations above 120ns accurately, which is sufficient f
 
 Several factors affect the speed of bandwidth reservations (and therefore reservation accuracy) including the number of threads and their placement across sockets and cores.
 I test the reservation system's accuracy by constraining thread placement while threads repeatedly reserve time and delay until the end of the reservation.
-It all available time is reserved, reservation overhead is negligible and the modeled bandwidth is accurate.
+If all available time is reserved, reservation overhead is negligible and the modeled bandwidth is accurate.
 However, when reservation length is sufficiently short reservation overheads will dominate, resulting in unreserved time.
 
 \input{OLTP_eval/Fig.Reservation.tex}
 
 Table~\ref{table::Reservation} shows the required reservation length (in ns) to reserve 99\% of time with six and 12 threads.
 Additionally, the Table shows different thread placement across sockets and cores.
-``Spread" implies assigning threads round-robin to all available resources, while ``pack" indicates that each resource is filled before assigning any threads to the next.
+``Spread" implies assigning threads round-robin to resources, while ``pack" indicates that each resource is filled before assigning any threads to the next.
 For example, assigning six threads in a pack sockets--spread cores policy (on a two socket server, each with six cores and two-way SMT) results in all six threads scheduled on the same socket but each thread on its own core (thus SMT is unused).
 Such a configuration requires reservations of only 44ns to reserve 99\% of bandwidth-time.
 
@@ -84,16 +84,16 @@ Spreading threads across sockets while packing cores requires 101ns to reserve 9
 The required time decreases from six to 12 threads as more threads are available to reserve time and it is less likely that time will go unreserved.
 
 These results suggest that bandwidth reservations will be accurate so long as each reservation exceeds 120ns.
-In Shore-MT I reserve bandwidth for each cache line persisted.
+My additions to Shore-MT reserve bandwidth for each cache line persisted.
 The persist bandwidth analysis study (presented later in Section~\ref{sec:OLTP_eval:Persists:Limitations}) shows that 35ns per cache line (approximately 1.7GB/s persists) represents sufficient bandwidth to negligibly limit performance.
 Since at least four cache lines are always reserved together (in \texttt{persist\_page} and \texttt{persist\_wal}) the bandwidth reservation is accurate.
 
 \textbf{NVRAM performance.}
 I introduce NVRAM read and write delays separately.
-Accurately modeling per-access increases in read latency is challenging, as reads are frequent and the expected latency increases on NVRAM are small.
+Accurately modeling per-access increases in read latency is challenging, as reads are frequent and the expected latency increases on NVRAM compared to DRAM are small.
 It is infeasible to use software instrumentation to model such latency increases at the granularity of individual reads; hardware support, substantial time dilation, or alternative evaluation techniques (e.g., simulation) would be required, all of which compromise accuracy and the ability to run experiments at full scale.
 Instead, I use offline analysis with PIN \cite{LukCohn05} to determine (1) the reuse statistics of buffer cache pages, and (2) the average number of cache lines accessed each time a page is latched.
-Together, these offline statistics provide an average number of cache line accesses per page latch event in Shore-MT while considering the effects of page caching.
+Together, these offline statistics provide an average number of cache line accesses per page latch event in Shore-MT.
 I then introduce a delay at each latch based on the measured average number of misses and an assumed per-read latency increase based on the NVRAM technology.
 
 I model NVRAM persist delays by annotating Shore-MT to track buffer cache writes at cache line granularity---64 bytes---using efficient ``dirty" bitmaps.
@@ -110,7 +110,7 @@ Experiments run TPCB for one minute (sufficient to reach steady state behavior) 
 Before starting recovery I drop the file system cache.
 Reported recovery time includes only the recovery portion of the Shore-MT process; I do not include system startup time nor non-recovery Shore-MT startup time.
 
-\textbf{Workloads}
+\textbf{Workloads.}
 I use three workloads and transactions in this evaluation: TPCC, TPCB, and TATP.
 TPCC models order management for a company providing a product or service \cite{TPCC}.
 TPCB contains one transaction class and models a bank executing transactions across branches, tellers, customers, and accounts \cite{TPCB}.
@@ -120,7 +120,7 @@ Table~\ref{table::Workloads} shows the workload configuration.
 I scale workloads to fit in a 12GB buffer cache.
 Persist performance experiments use a single write-heavy transaction from each workload while read performance experiments use each workload's full mix.
 All experiments report throughput as thousands of Transactions Per Second (kTPS).
-Experiments perform ``power runs" -- each thread generates and executes transactions continuously without think time -- and run an optimal number of threads per configuration (between 10 and 12).
+Experiments perform ``power runs"---each thread generates and executes transactions continuously without think time---and run an optimal number of threads per configuration (between 10 and 12).
 
 \begin{table}
   \centering
@@ -152,7 +152,7 @@ I wish to determine, for a given NVRAM read latency, how much caching is necessa
 The NVRAM read-performance model combines memory access trace analysis with the timing model to measure transaction throughput directly in Shore-MT.
 Traces consist of memory accesses to the buffer cache, collected running Shore-MT with PIN for a single transaction thread for two minutes.
 I assume concurrent threads exhibit similar access patterns.
-In addition, I record all latch events (acquire and release) and latch page information (i.e., table id, store type -- index, heap, or other).
+In addition, I record all latch events (acquire and release) and latch page information (i.e., table id, store type---index, heap, or other).
 I analyze traces at cache line (64 bytes) and page (8KB) granularity.
 
 These traces provide insight into how Shore-MT accesses persistent data, summarized in Table~\ref{table::AccessCharacteristics}.
@@ -185,9 +185,9 @@ While too large for on-chip caches, such a buffer might be possible as a hardwar
 \input{OLTP_eval/Fig.Caching.tex}
 I have shown that modest cache sizes effectively hide NVRAM read stalls for these workloads, and further analyze caching behavior to reason about OLTP performance more generally.
 Figure~\ref{fig::Caching} shows the page miss rate per page type (index, heap, or other) as page cache capacity increases.
-Each graph begins at 1.0 at the left---all page accesses miss for a single-page cache.
+Each graph begins at one at the left---all page accesses miss for a single-page cache.
 As cache capacity increases, workloads see their miss rates start to decrease between cache capacity of five and 20 pages.
-TATP experiences a decrease in misses primarily in index pages, whereas TPCB and TPCC see a decrease across all page types.
+TATP experiences a decrease in misses primarily in index pages, whereas TPCB and TPCC see decreases across all page types.
 
 While cache behavior is specific to each workload, the results represent trends applicable to many databases and workloads, specifically, index accesses and append-heavy tables.
 First, all workloads see a decrease in index page misses as soon as B+Tree roots (accessed on every traversal) successfully cache.
@@ -224,13 +224,13 @@ Investigating main-memory database optimizations for NVRAM remains future work.
 \textbf{Bandwidth.}
 Finally, I briefly address NVRAM read bandwidth.
 For a worst-case analysis, I assume no caching.
-Given the average number of cache line accesses per page latch, the average number of page latches per transaction, and transaction throughput (taken from Section~\ref{sec:OLTP_eval:Persists}), I compute worst-case NVRAM read bandwidth for each workload, shown in Table~\ref{table::ReadBandwidth}~
-The considered workloads require at most 1.168 GB/s (TPCC).
-Since this is lower than expected NVRAM bandwidth and caching reduces the required bandwidth further, I conclude that NVRAM read bandwidth for persistent data on OLTP is not a concern.
+Given the average number of cache line accesses per page latch, the average number of page latches per transaction, and transaction throughput (taken from Section~\ref{sec:OLTP_eval:Persists}), I compute worst-case NVRAM read bandwidth for each workload, shown in Table~\ref{table::ReadBandwidth}.
+The considered workloads require at most 1.2 GB/s (TPCC).
+Since this is within expected NVRAM bandwidth constraints and caching reduces the required bandwidth further, I conclude that NVRAM read bandwidth for persistent data on OLTP is not a performance concern.
 
 \subsection{Summary}
 \label{sec:OLTP_eval:Reads:Summary}
-NVRAM presents a new storage technology for which modern database systems have not been optimized.
+NVRAM presents a new storage technology, requiring new optimizations for database systems.
 Increased memory read latencies require new consideration for database caching systems.
 I show that persistent data for OLTP can be cached effectively, even with limited cache capacity.
 I expect future NVRAM software to leverage hardware caches, omitting software buffer caches.
@@ -239,7 +239,7 @@ Next, I turn to write performance for storage management on NVRAM devices.
 \section{NVRAM Persist Synchronization}
 \label{sec:OLTP_eval:Persists}
 
-Whereas NVRAM reads benefit from caching, persists must always access the device.
+Whereas NVRAM reads benefit from caching, persists must always access the storage device.
 Of particular insterest is the cost of ordering persists via persist barriers.
 Several factors increase persist barrier latency, including ordering persists across distributed/NUMA memory architectures, long latency interconnects (e.g., PCIe-attached storage), and slow NVRAM MLC cell persists.
 I consider the effect of persist barrier latency on transaction processing throughput to determine if and when new NVRAM technologies warrant redesigning recovery management.
@@ -297,7 +297,7 @@ However, \GroupCommit increases transaction latency.
 \input{OLTP_eval/Fig.XctLatency.tex}
 
 \GroupCommit improves transaction throughput by placing transactions into batches and committing all transactions in a batch atomically.
-Doing so minimizes and limits the number of inserted persist barriers.
+Doing so minimizes and limits the number of persist barriers.
 However, deferring transaction commit increases transaction latency, especially for the earliest transactions in each batch.
 To achieve reasonable throughput, batches must be significantly longer than average transaction latency (such that batch execution time dominates batch quiesce and persist time).
 The batch period acts as a knob for database administrators to trade off transaction latency and throughput.
@@ -331,7 +331,7 @@ The \NVDisk configuration flushes pages aggressively (attempts to flush continuo
 Since bandwidth is restricted recovery latency may increase (not reflected in the results).
 Page flushing contends with log flushing for bandwidth, but so long as log flushes are minimally delayed throughput will not be affected.
 TATP, which contains short transactions, requires the most bandwidth (1.7GB/s) to reduce transaction commit delays.
-I believe that asynchronous commit would alleviate this bandwidth requirement.
+I believe that asynchronous commit (allowing a new transaction to begin processing on the hardware thread while the previous transaction waits to commit) would lower the bandwidth requirement.
 TPCC, on the other hand, has long transactions and transaction commit is less of a concern.
 
 \InPlace requires the least bandwidth of the recovery mechanisms.
@@ -339,16 +339,16 @@ TATP's Update Location transaction needs only 0.4GB/s since each transaction con
 TPCC's New Order transaction modifies much more data, requiring 0.8GB/s persist bandwidth to achieve 95\% throughput.
 
 Finally, \GroupCommit sees varying requirements on persist bandwidth.
-All persists occur at batch boundaries, resulting in quick persist bursts.
+All persists occur at batch boundaries, resulting in persist bursts.
 I consider two batch periods---20ms and 200ms.
 TATP and TPCC require relatively small bandwidths while TPCC requires over 1.5GB/s persist bandwidth to achieve 95\% throughput.
 The bursty nature of \GroupCommit and large modifications by TPCC's New Order transaction result in persist bandwidth quickly creating a bottleneck.
 Longer batches help slightly by allowing updates to coalesce within the batch, reducing the total number of bytes persisted.
-The bandwidth requirements would be reduced by introducing mechanisms to enable early persists (persist data before the batch ends).
+The bandwidth requirements would be reduced by introducing mechanisms to enable early persists (persist data before the batch ends), removing persist bursts.
 
 While persist bandwidth requirements vary, the strictest configuration (\NVDisk for TATP) requires only 1.7GB/s.
 Such bandwidth is currently possible with existing PCIe Flash memory SSDs, and I believe is attainable for all candidate NVRAM technologies.
-Thus, I conclude that persist bandwidth will not be a concern for OLTP systems using NVRAM.
+I expect that persist bandwidth will not be a concern for OLTP systems using NVRAM.
 
 \textbf{Device lifetime.}
 NVRAM technologies, much like Flash memory currently, will have limited write endurance; each cell may only be reliably written a finite number of times.
@@ -359,17 +359,17 @@ While the recovery mechanisms presented here each produce varying persist rates 
 
 \input{OLTP_eval/Fig.WearLeveling.tex}
 Figure~\ref{fig::WearLeveling} shows the required cell endurance (number of persists) to achieve a 10-year device lifetime assuming the database runs at maximum throughput continuously.
-Persists are tracked at byte granularity.
-I consider two scenarios: no wear leveling---lifetime is limited by the most frequently written address, and perfect wear leveling---all persists are evenly distributed across all physical addresses (provided in hardware).
-I consider \NVDisk with instantaneous recovery and 3s recovery latency, \InPlace, and \GroupCommit with 20ms and 200ms batch latencies.
 All recovery mechanisms assume \InPlace's throughput for a more fair comparison.
+Persists are tracked at byte granularity.
+I consider two scenarios: no wear leveling---lifetime is limited by the most frequently written address---and perfect wear leveling---all persists are evenly distributed across all physical addresses (provided in hardware).
+I consider \NVDisk with both instantaneous recovery and 3s recovery latency, \InPlace, and \GroupCommit with 20ms and 200ms batch latencies.
 Logs are implemented as circular buffers.
-Thus, logs do not contribute to the most written byte and have no bearing on device lifetime without hardware wear leveling.
+Thus, logs do not contribute to the most written byte and have no bearing on device lifetime when hardware wear leveling is unavailable.
 Perfect wear leveling assumes a 32GB device.
 
 Without hardware wear leveling \NVDisk with instantaneous recovery (aggressive page flushing) and \InPlace require the greatest cell endurance.
 Both mechanisms persist each update directly to the NVRAM store.
-\NVDisk must additionally persist LSNs, which are the most persisted data, while LSNs are no longer used with \InPlace and \GroupCommit.
+\NVDisk must additionally persist LSNs, which constitute the most frequently persisted addresses, while LSNs are no longer used with \InPlace and \GroupCommit.
 Both of these configurations require greater cell endurance far greater than $10^8$ writes, the endurance expected of phase change memory \cite{BurrKurdi08}.
 
 \NVDisk with 3s recovery latency requires much lower cell endurance for a 10 year lifetime.
@@ -379,20 +379,20 @@ However, doing so requires an increase in recovery latency.
 \NVDisk may possibly provide acceptable software wear leveling so long as recovery latency is reasonable.
 
 Finally, \GroupCommit provides wear leveling by only allowing a single persist to each address per batch (all other persists coalesce).
-However, 20ms nor 200ms batches are unable to coalesce enough writes to guarantee a 10 year device lifetime.
-\GroupCommit would require far too large a batch period, and therefore transaction latency, to reliably wear-level NVRAM.
+However, neither 20ms nor 200ms batches is capable of coalescing enough writes to guarantee a 10 year device lifetime.
+\GroupCommit would require far too large a batch period, increasing transaction latency, to reliably wear-level NVRAM.
 
 When hardware distributes persists evenly across NVRAM cells all recovery mechanisms achieve a 10 year lifetime assuming $10^8$ writes per cell.
 In this case lifetime is determined by the total number of persists rather than the most-persisted address.
-Due to the inability of software to reliably and sufficiently extend device lifetime, I expect future NVRAM SSDs to include hardware wear leveling.
+Due to the inability of software to reliably and sufficiently extend device lifetime, and the effectiveness of hardware wear leveling, I expect future NVRAM SSDs to include hardware wear leveling.
 
 \subsection{Summary}
 \label{sec:OLTP_eval:Persists:Summary}
-Persist barriers used to enforce persist order pose a new obstacle to providing recoverable storage management with NVRAM.
+Persist barriers used to enforce persist order pose a new performance obstacle to providing recoverable storage management with NVRAM.
 I show that, for memory bus-attached NVRAM devices, ensuring recovery using \InPlace is a viable strategy that provides high throughput and removes the overheads of WAL.
 For interconnects and NVRAM technologies that incur larger persist barrier delays, \GroupCommit offers an alternative that yields high throughput and reasonable transaction latency.
 \GroupCommit's batch period allows precise control over transaction latency for latency-critical applications.
-Finally, I demonstrate that persist bandwidth is not a concern and that while \NVDisk may provide an effective mechanism to cope with limited write endurance I expect future devices to include hardware wear leveling.
+Finally, I demonstrate that persist bandwidth is not a concern, and that while \NVDisk may provide an effective mechanism to cope with limited write endurance I expect future devices to include hardware wear leveling.
 
 %\section{Proposed Work}
 %\label{sec:OLTP_eval:Proposed}
@@ -459,3 +459,8 @@ Treating NVRAM as a drop-in replacement for disk, \NVDisk retains centralized lo
 \InPlace reduces these overheads, but for large persist barrier latencies suffers from excessive synchronization stalls.
 I proposed a new recovery mechanism, \GroupCommit, to minimize these stalls while still removing centralized logging.
 While \GroupCommit increases high-percentile transaction latency, latency is controllable and within modern application constraints.
+
+This work assumed that persist barriers are expensive, stalling instruction and thread execution at each barrier.
+However, it is possible for systems to implement high performance barriers that overlap instruction execution with persists while still enforcing proper persist order.
+Additionally, persist barriers must interact with existing memory execution and the memory consistency model to enforce an order between persists from different threads.
+The remainder of this dissertation investigates programming interfaces that to enforce persist order while still maximizing persist concurrency.

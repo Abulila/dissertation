@@ -24,6 +24,6 @@
       \\
     \end{tabular}
   }
-  \caption{\textbf{Bandwidth reservation bendmark.} Benchmark repeatedly reserves bandwidth as time and delays until end of the reservation.  Reservations are inaccurate if entire time cannot be reserved (reservation overhead dominates).  Results shown are reservation sizes (in ns) to reserve 99\% time.  We vary thread placement across CPU sockets and cores: packed (fill socket/core before allocating new) or spread (round robin assign to resources).  122ns and greater reservations accurately model constrained bandwidth.}
+  \caption{\textbf{Bandwidth reservation bendmark.} Benchmark repeatedly reserves bandwidth as time and delays until end of the reservation.  Reservations are inaccurate if entire time cannot be reserved (reservation overhead dominates).  Results shown are reservation sizes (in ns) to reserve 99\% time.  Thread placement is varied across CPU sockets and cores: packed (fill socket/core before allocating new) or spread (round robin assign to resources).  122ns and greater reservations accurately model constrained bandwidth.}
   \label{table::Reservation}
 \end{table*}
