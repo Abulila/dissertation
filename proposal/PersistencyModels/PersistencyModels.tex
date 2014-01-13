@@ -1,7 +1,7 @@
 This chapter provides examples of memory persistency models and data structures using the memory persistency framework defined in the previous chapter.
 I first introduce a concurrent, persistent queue, outlining several design choices and reasoning about persist performance.
-I then define specific memory persistency models under sequential consistency (SC).
-The final chapter of this thesis evaluates these persistency models using the persistent queue.
+I then define specific memory persistency models under sequential consistency (SC), demonstrating their use with the persistent queue.
+The final chapter of this dissertation evaluates these persistency models using the persistent queue.
 
 \section{Persistent Queue}
 \label{sec:PersistencyModels:Queue}
@@ -14,7 +14,7 @@ I extend this work, outlining three queue designs with several persistency model
 Fundamentally, a persistent queue inserts and removes entries while maintaining their order.
 The queue must recover after failure, preserving proper entry values and order.
 
-The goal in designing a persistent queue is to improve the persist concurrency of insert operations both through improved thread concurrency and relaxed persistency.
+My goals in designing a persistent queue are to (1) maximize the instruction execution rate, including multi-thread throughput, (2) improve the persist concurrency of insert operations through greater thread concurrency, and (3) further improve persist concurrency using relaxed persistency.
 All designs are concurrent (thread-safe) but allow varying degrees of persist concurrency.
 Additionally, the three designs are fashioned as circular buffers, containing a data segment and head and tail pointers.
 Psuedo-code for the three designs is shown in Figure~\ref{Alg::Queue}.
@@ -29,15 +29,16 @@ If the systems fails before the persist to the head pointer in line 6, the entry
 I improve persist concurrency in the second design, \emph{Two-Lock Concurrent} (2LC), by using two different locks to reserve data segment space and persist to the head pointer, respectively.
 Neither lock is held while entry data persists to the data segment, allowing concurrent persists from different threads.
 Additionally, a volatile \emph{insert list} is maintained to detect when insert operations complete out of order and prevent holes in the queue.
+The double-checked locking pattern prevents data races while updating the insert queue.
 \emph{Two-Lock Concurrent} employs the same recovery as \emph{Copy While Locked}---an entry is not valid and recoverable until the head pointer encompasses the associated portion of the data segment.
 
 \input{PersistencyModels/Fig.CWL_dependences}
 
-Both queue designs use the persistency model to prevent persists to the head pointer from occurring before persists to the data segment for each insert operation.
+Both queue designs use the persistency model to prevent persists to the head pointer from occurring before persists to the data segment.
 Figure~\ref{Alg::Queue} includes barriers for two different persistency models (described later in Section~\ref{sec:PersistencyModels:Models}).
 Additionally, persist dependences (and unnecessary constraints introduced by strict persistency models) are shown in Figure~\ref{fig::CWL_dependences}.
 Recovery requires that persists to the head pointer are ordered after persists to the data segment from the same insert operation and persists to the head pointer occur in insert-order to prevent holes in the queue (persists to the head pointer may coalesce so long as no ordering constraint is violated).
-All other persists within the same insert operation and between operations may correctly be concurrent.
+All other persists within the same insert operation and between operations may occur concurrently without compromising recovery correctness.
 
 While not necessary for correct recovery, these persist dependences are difficult to describe minimally; ordering mechanisms often introduce unnecessary persist constraints (dashed lines in the Figure).
 Persistency models that enforce program order of persists in each thread must serialize persists for the data of each entry to the data segment (when the entire entry cannot be persisted atomically), shown as ``A" in the Figure.
@@ -54,7 +55,7 @@ I consider a third design, \emph{Queue Holes}, that provides both improved persi
 A single lock is held while reserving queue space and updating the head pointer, but is released prior to persisting the entry into the data segment.
 An entry is recovered after failure if the entry is located within the region indicated by the head pointer (as in CWL and 2LC) and the entry's endBit is set.
 The minimal set of persist dependences necessary for correct recovery are shown in Figure~\ref{fig::holes_dependences}.
-The length and endBit persist before the head pointer; the data segment persists before setting the endBit; and persists to the same address occur in the order observed by cache coherence (endBits and the head pointer).
+The length and cleared endBit persist before the head pointer; the data segment persists before setting the endBit; and persists to the same address occur in the order observed by cache coherence (endBits and the head pointer).
 An inserted entry is recoverable only after the persist at line 37 completes, even though the head pointer is persisted earlier at line 33.
 
 As with the other queue designs many unnecessary persist constraints may be introduced by strict persistency models, shown as dashed lines in Figure~\ref{fig::holes_dependences}.
@@ -90,7 +91,7 @@ Figures~\ref{fig::CWL_dependences} and~\ref{fig::holes_dependences} illustrate t
 Lacking mechanisms to relax persist ordering, strict persistency under SC introduces all the shown dependences (dashed lines).
 
 These dependences are introduced because persists occur in program order under SC.
-This persistency model lacks the ability to declare two persists from the same thread to be concurrent (unless the persists may occur atomically).
+This persistency model lacks the ability to declare two persists from the same thread to be concurrent.
 However, persist concurrency may be created by using multiple threads to concurrently insert into the queue.
 \emph{Two-Lock Concurrent} and \emph{Queue Holes} each allow concurrent inserts, and thus persists from different threads into the data segment are concurrent---The dashed line labeled ``B" in Figure~\ref{fig::CWL_dependences} no longer implies a constraint.
 
@@ -107,7 +108,7 @@ A single store may introduce persist ordering constraints with many threads, eac
 It is unclear how to design a system that satisfies these constraints without frequent delays.
 
 While insufficient for SC, TSO might be implemented by recording a ``persist counter" and thread in each cache line.
-Each time a thread persists it increments its persist counter, and each store (including volatile stores and persists) writes the thread and persist counter into the cache line.
+Each time a thread persists it increments its persist counter, and each store (both volatile stores and persists) writes the thread and persist counter into the cache line.
 Persists drain in program order by maintaining a persist queue per thread/core.
 Persist order between threads is enforced at each load and store by observing the previously recorded thread and counter in the operation's cache line---all subsequent stores from the executing thread must occur after the last persist to the cache line.
 These inter-thread persist constraints may be recorded in threads' queues or by delaying immediately until the other thread's queue drains.
@@ -116,9 +117,9 @@ Such a system resembles BPFS (discussed next in Section~\ref{section:Persistency
 Strict persistency under SC may also be implemented using in-hardware NVRAM logs or copy-on-write and indirection to give the appearance of SC while persists occur concurrently.
 Hardware must ensure both that persists do not occur out of program order for any thread and that conflicting accesses properly enforce persist order across threads.
 An intriguing possibility would be to leverage existing hardware transactional memories (HTM), partitioning program execution into transactions that enforce atomicity, isolation, and durability---resembling BulkSC with durable transactions \cite{CezeTuck07}.
-Transactions must be long enough to minimize transaction overhead (including persist barriers for each durable transaction) and improve persist concurrency (by placing many persists in the same transaction), but short enough to bound resources necessary for atomic transactions and to minimize forward progress lost when a transaction aborts.
-Additionally, transactions may buffer persists so long as transactions become visible to recovery in their proper order.
-I leave it to future work to investigate how to coalesce persists between durable transactions.
+Transactions must be long enough to minimize transaction overhead (including persist barriers for each durable transaction) and improve persist concurrency (by placing many persists in the same transaction), but short enough to bound resources necessary for atomic transactions (such as a log) and to minimize forward progress lost when a transaction aborts.
+%Additionally, transactions may buffer persists so long as transactions become visible to recovery in their proper order.
+%I leave it to future work to investigate how to coalesce persists between durable transactions.
 
 \subsection{Epoch Persistency}
 \label{section:PersistencyModels:PersistEpochs}
@@ -143,6 +144,7 @@ I define a \emph{persist epoch race} as persist epochs from two or more threads 
 In the presence of persist epoch races, each persist barrier acts as a persist release for all persists prior to the barrier, and as a persist acquire for all accesses following the barrier \cite{GharachorlooLenoski90}.
 As a consequence, persists prior to the persist barrier immediately preceding the first access of the race are ordered before all persists after the next barrier following the second access of the race.
 However, persists within the epochs participating in the persist epoch race are concurrent and may complete in parallel or out of order.
+Persists from racing epochs are additionally ordered according to the order observed by cache coherence.
 
 \textbf{Discussion.}
 Epoch persistency provides an intuitive mechanism to guarantee proper recovery as it is impossible at recovery to observe a persist from after a barrier while failing to observe a persist from before the same barrier.
@@ -170,12 +172,12 @@ As a result, BPFS detects conflicts to persistent memory according to TSO rather
 
 \textbf{Persist Performance.}
 Epoch persistency removes all unnecessary persist dependences that result from strict persistency's program order constraint.
-All versions of the persistent queue benefit from allowing persist entries to persist to the data segment concurrently, regardless of the size of the entry.
+All versions of the persistent queue benefit from allowing persist entries to persist to the data segment concurrently.
 Additionally, \emph{Queue Holes} allows entry length and \emph{endBit} to persist concurrently (although both are ordered with respect to the subsequent persist of the head pointer).
 Finally, many persist constraints between threads are removed by intentionally allowing persist epoch races.
-Lock operations occur in the same epoch as the first persists of the insert operation, while unlock operations occur in the same barrier as the last persists; persists from the the last epoch of an insert and the first epoch of the subsequent insert are concurrent.
-\emph{Copy While Locked} and \emph{Queue Holes} retain recovery correctness by still ordering all persists to the head marker (persists will occur according to cache coherence order).
+Lock operations occur in the same epoch as the first persists of the insert operation, while unlock operations occur in the same epoch as the last persists; persists from the last epoch of an insert and the first epoch of the subsequent insert are concurrent.
 As a result, persists protected by a lock now occur concurrently.
+\emph{Copy While Locked} and \emph{Queue Holes} retain recovery correctness by still ordering all persists to the head marker (persists occur according to cache coherence order).
 
 Figure~\ref{Alg::Queue} demonstrates how to use epoch persistency's barriers (shown in the code as $PersistBarrier$) within each queue design.
 The constraints in Figures~\ref{fig::CWL_dependences} and~\ref{fig::holes_dependences} annotated with ``A" are removed under epoch persistency relative to strict persistency.
@@ -214,11 +216,14 @@ To enforce necessary ordering, a persist strand begins by reading any memory loc
 These reads introduce an ordering dependency due to cache coherence, which can then be enforced with a subsequent persist barrier.
 This programming interface allows ordering constraints to be specified at the granularity of individual addresses; the minimal set of persist dependences is achieved by placing each persist in its own strand, loading all addresses the persist must depend on, inserting a persist barrier, and then executing the persist.
 
+The performance of epoch persistency is achieved by using a single persist strand on each thread (strand persistency is equivalent to epoch persistency under such conditions).
+While I enforce persist order within strands according to epoch persistency, other persistency models may be used (e.g., strict persistency/SC orders persists within strands but new strands clear previously observed dependences).
+
 While intended for persistency, strand persistency additionally functions as a consistency model (\emph{strand consistency}).
 Strand consistency requires full memory barriers in lieu of persist barriers; loads and stores may not reorder across memory barriers.
 Additionally, the execution of loads and stores may not reorder across strand barriers for the purpose of observing memory dependences between strands on the same thread, but loads and stores from different strands that do not interact may reorder with respect to other processors and threads.
 Dependences propagate through memory execution and cache coherence, with strands from the same thread being concurrent if they do not share conflicts through memory (i.e., the visibility of loads and stores from different strands may reorder).
-Recent trends suggest that such a relaxed consistency model is unnecessary for typical memory architectures; memory systems have tended towards stricter models with improved performance.
+Recent trends suggest that such a relaxed consistency model is unnecessary for typical memory architectures as memory systems have tended towards stricter models with improved performance.
 
 \textbf{Persist Performance.}
 The persistent queue implementations place each insert task in a separate persist strand.
@@ -243,12 +248,12 @@ For example, file systems must constrain the order of disk operations to metadat
 
 Specifying and honoring these dependencies becomes harder when the interface to durable storage are loads and stores to a persistent address space.
 Store instructions to an address space are more frequent and fine grained than update operations when using a block-based interface to durable storage (such as a file system).
-In addition, CPU caches interpose on store instructions, which leads to the interaction of persistency and cache consistency discussed in this thesis.
+In addition, CPU caches interpose on store instructions, which leads to the interaction of persistency and cache consistency discussed in this dissertation.
 
 Recent developments in nonvolatile memory technologies have spurred research on how to use these new technologies.
 Some research projects keep the traditional block-based interface to durable storage and devise ways to accelerate this interface~\cite{CaulfieldDe10}.
 Other projects provide a memory-based interface to durable storage~\cite{CoburnCaulfield11}.
-My approach follows the path of providing a memory-based interface to durable storage, arguing that the high speed and byte addressability of new nonvolatile memories provides a natural fit with native memory instructions.
+My approach follows the path of providing a memory-based interface to durable storage, arguing that the high speed and fine-grained access of new nonvolatile memories provides a natural fit with native memory instructions.
 
 Combining a memory interface to durable storage with multiprocessors adds concurrency control issues to those of durability.
 Transactions are a common and powerful paradigm for handling both concurrency control and durability, so many authors have proposed layering transactions on top of nonvolatile memory~\cite{Lowell97,CoburnCaulfield11,VolosTack11,Coburn13}.
