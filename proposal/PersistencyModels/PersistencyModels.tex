@@ -162,7 +162,7 @@ However, synchronization through persistent memory is possible.
 Since persists to the same address must follow the order observed by cache coherence, even if they occur in epochs that race, the outcome of persist synchronization is well defined.
 Hence, atomic read-modify-write operations to persistent memory addresses provide the expected behavior.
 
-My definition of epoch persistency is inspired by the programming model and hardware extensions for caching persisent memory proposed for the Byte-addressable Persistent File System (BPFS) \cite{ConditNightingale09}.
+My definition of epoch persistency is inspired by the programming model and hardware extensions for caching persistent memory proposed for the Byte-addressable Persistent File System (BPFS) \cite{ConditNightingale09}.
 However, I introduce several subtle differences that I believe make epoch persistency a more intuitive model.
 My definition considers all memory accesses when determining persist ordering among threads, whereas the BPFS memory system orders persists only when conflicts occur to the persistent address space.
 While the BPFS file system implementation avoids persist epoch races, it is not clear that the burden falls to the programmer to avoid such accesses or what persist behavior results when such races occur (I believe the BPFS authors' intent was to prohibit programs containing such races---the cache implementation deadlocks under persist epoch races containing circular persist dependences).  
@@ -275,7 +275,7 @@ Finally, as with racing persist epochs, durable transactions that race break tra
 A precise persistency model must specify how to avoid such behavior or what intended behavior results from persistent transaction races.
 
 \textbf{BPFS.}
-The techniques most closely related to those proposed in this thesis are the primitives for describing persist dependencies in the Byte-Addressable Persistent File System (BPFS)~\cite{ConditNightingale09}.
+The techniques most closely related to those proposed in this dissertation are the primitives for describing persist dependencies in the Byte-Addressable Persistent File System (BPFS)~\cite{ConditNightingale09}.
 Condit \emph{et al.} introduce \emph{persist barriers}, similar to existing memory barriers, that constrain the order of writes to the persistent address space.
 Any two persists separated by a barrier must occur in program order, but persists within the same epoch (interval of execution separated by barriers) are concurrent.
 Additionally, Condit assumes that NVRAM allows eight byte atomic writes, allowing many updates to write atomically in-place without additional recovery mechanisms.

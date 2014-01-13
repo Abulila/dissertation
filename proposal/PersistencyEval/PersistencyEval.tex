@@ -1,4 +1,4 @@
-The previous two chapter described a recoverable persistent queue data structure as well as three memory persistency models.
+The previous two chapters described a recoverable persistent queue data structure as well as three memory persistency models.
 This chapter uses the queue and models to motivate the need for relaxed memory persistency models.
 First, I describe the methodology used for this evaluation.
 
@@ -80,7 +80,7 @@ To determine system performance, I assume that only one of the instruction execu
 
 \input{PersistencyEval/NormalizedPerformance}
 
-Table~\ref{table::RelaxedPerformance} shows the achievable throughput for the queue microbenchmarks and persistency models for both one and eight threads assuming 500ns persists.
+Table~\ref{table::RelaxedPerformance} shows the achievable throughput for the queue benchmarks and persistency models for both one and eight threads assuming 500ns persists.
 Rates are normalized to instruction execution---normalized rates above one (bold) admit sufficient persist concurrency to achieve the instruction execution rate while normalized rates below one are limited by persists.
 Instruction execution rates vary between log version and number of threads (not shown).
 
@@ -115,7 +115,7 @@ However, as persist latency increases each model eventually becomes persist-boun
 Strict persistency becomes persist-bound at only 17ns.
 Epoch persistency improves persist concurrency---instruction execution rate and persist rate break even at 119ns.
 While this is a great improvement, I expect most NVRAM technologies to exhibit higher persist latency.
-Finally, strand persistency offers sufficient persist concurrency to become persist-bound only above 6us.
+Finally, strand persistency offers sufficient persist concurrency to become persist-bound only above 6us, greater than expected NVRAM persist latency.
 
 In all cases throughput quickly decreases once execution is persist-bound as persist latency continues to increase.
 Persists limit the most conservative persistency models even at DRAM-like write latencies.
@@ -230,7 +230,7 @@ Both of these may vary in real implementations; I measure their effect on persis
 
 \textbf{Atomic Persist Granularity.}
 Atomic persist granularity is an important factor for persist concurrency and performance.
-As in \cite{ConditNightingale09} I assume NVRAM persists atomically to at least eight-byte (pointer-sized) blocks of memory (a persist to an eight byte, aligned memory block will always have occurred or not after failure; there is no possibility of a partial persist).
+As in \cite{ConditNightingale09} I assume NVRAM persists atomically to at least eight-byte (pointer-sized) blocks of memory (a persist to an eight-byte, aligned memory block will always have occurred or not after failure; there is no possibility of a partial persist).
 However, increasing atomic persist granularity creates opportunities for additional persist coalescing.
 Nearby or adjacent persists may occur atomically and coalesce so long as no persist dependences are violated.
 %For example, consider two ordered persists to adjacent eight-byte objects.
@@ -243,7 +243,7 @@ Figure~\ref{fig::Coalescing} displays average persist ordering critical path per
 At eight-byte persists there is a large separation between strict persistency and epoch persistency.
 As atomic persist size increases the persist critical path of strict persistency steadily decreases while the critical path of epoch persistency remains largely unchanged.
 At 512-byte atomic persists (right of the Figure) strict persistency matches epoch persistency.
-For these queue microbenchmarks larger atomic persists provide the same improvement to persist critical path as relaxed persistency, but offer no improvement to relaxed models.
+For these queue benchmarks larger atomic persists provide the same improvement to persist critical path as relaxed persistency, but offer no improvement to relaxed models.
 Increasing atomic persist granularity offers an alternative to relaxed persistency models.
 
 \textbf{Persist False Sharing.}
@@ -262,13 +262,13 @@ At 512-byte tracking granularity strict persistency and epoch persistency provid
 \section{Future Work}
 \label{sec:PersistencyEval:FutureWork}
 
-This thesis has laid the foundation for reasoning about NVRAM performance and programming interfaces, culminating in memory persistency.
+This dissertation lays the foundation for reasoning about NVRAM performance and programming interfaces, culminating in memory persistency.
 However, I leave it to future work to investigate how best to use persistency to build recoverable systems with NVRAM.
 
 \textbf{Software for NVRAM.}
 NVRAM should eventually allow data structures with the performance of existing DRAM systems but that recover after failures.
-Such software will require transformations to introduce logs or indirection, or to properly order writes.
-These transformations will slow execution on even volatile memory systems.
+Such software will require transformations to introduce logs or indirection, and to properly order writes.
+These transformations slow execution on even volatile memory systems.
 However, an instruction-direct memory interface holds the potential to improve execution beyond block and transaction interfaces by increasing thread concurrency and removing frequent copies inherent in block storage interfaces.
 
 New data structures must be developed to bridge the gap between existing high performance main-memory versions and those that provide recovery with disk.
@@ -280,14 +280,14 @@ How to design such data structures remains uncertain, as does their true perform
 Once software has been designed we will require hardware implementations of persistency models and NVRAM memory systems.
 Existing memory consistency encompasses a broad literature of models and implementations, detailing specific relaxations to improve performance.
 High performance techniques involving speculation further improve performance for strict consistency models.
-The same will be true for persistency models, yet I expect models must be further relaxed compared to consistency models (an NVRAM persist may take an order of magnitude longer than making a store visible to other processors).
-Akin to speculation, logging and indirection (such as copy-on-write) may improve performance for implementations of strict persistency models.
+The same will be true for persistency models, yet I expect persistency models must be further relaxed compared to consistency models (an NVRAM persist may take an order of magnitude longer than making a store visible to other processors).
+Akin to speculation, logging and indirection (such as copy-on-write) may improve performance of strict persistency models.
 
 \textbf{Implementing efficient persist coalescing.}
 Finally, the previous chapters assume that coalescing will be an important feature of NVRAM systems; indeed, recent work has already demonstrated that without hardware coalescing the software must cache and coalesce persists, introducing additional instructions and increasing the likelihood of design errors \cite{ConditNightingale09,FangHsiao11}.
-Coalescing presents several problems such as detecting when coalescing is allowable and determining how long persists should be delayed (delaying a persist increases the chance that it will coalesce with another persist, but may delay important events such as transaction commit).
+Coalescing presents several problems such as detecting when coalescing is allowable and determining how long persists should be delayed (delaying a persist increases the chance that it will coalesce with future persists, but may delay important events such as transaction commit).
 Future work must investigate language, compiler, and hardware mechanisms to provide persist coalescing.
-It is possible for coalescing to occur only under specific conditions (e.g., coalescing only occurs between persists on the same thread, coalescing only occurs to a limited number of addresses labeled by the programmer).
+It is possible for coalescing to occur only under specific conditions (e.g., coalescing only occurs between persists on the same thread, coalescing only occurs to a limited number of addresses labeled by the programmer), reducing hardware complexity.
 
 \section{Conclusion}
 \label{sec:PersistencyEval:Conclusion}

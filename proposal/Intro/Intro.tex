@@ -9,7 +9,7 @@ As drop-in replacements for disk, Flash and NVRAM greatly accelerate storage acc
 However, the disk interface fails to leverage specific device characteristics.
 Section~\ref{sec:Background:Storage} provides a background on these storage technologies and specifically how their performance differs from disk.
 
-This thesis investigates how several data-centric workloads interact with future storage technologies, the relevant software and algorithms, and in some instances computer hardware.
+This dissertation investigates how several data-centric workloads interact with future storage technologies, the relevant software and algorithms, and in some instances computer hardware.
 Specifically, I consider analytics (commonly Decision Support Systems -- DSS -- popular in ``Big Data") and On-Line Transaction Processing (OLTP).
 Both workload classes have been optimized to surmount disk's constraints, yet storage devices often remain the performance bottleneck and dominant cost.
 I match each workload to the emerging storage technology that suits it best and address specific opportunities or deficiencies in the software and hardware systems.
@@ -70,7 +70,7 @@ This work was originally published at VLDB \cite{Pelley13}.
 \label{sec:Intro:PMC}
 
 The previous work looks at how OLTP recovery mechanisms should be designed, considering only the average delay incurred by persist barriers.
-The final portion of this thesis investigates specific programming interfaces to order NVRAM writes.
+The final portion of my dissertation investigates specific programming interfaces to order NVRAM writes.
 Whereas existing memory consistency models provide control over the order and visibility of volatile memory reads and writes across threads, there are no equivalent models to reason about data persistence.
 Memory consistency may be relaxed, allowing communicating threads to each observe different memory read and write orders.
 Such memory consistency models improve performance, but require complex reasoning and additional programming mechanisms (memory barriers) to ensure expected behavior.
@@ -88,7 +88,7 @@ Relaxed persistency models regain lost throughput by improving NVRAM write concu
 
 \section{Data Center Infrastructure}
 \label{sec:Intro:Additional}
-The themes of this thesis include performance, cost efficiency, and reliability.
+The themes of this dissertation include performance, cost efficiency, and reliability.
 While I focus on storage architectures, I additionally published work regarding the cost and reliability of data center infrastructure.
 Appendix~\ref{app:WEED} contains ``Understanding and Abstracting Total Data Center Power," published at WEED 2009 \cite{PelleyMeisner09}.
 This work presents power/energy models for all aspects of the data center, including power distribution, battery backups, cooling infrastructure, and IT equipment.
@@ -104,7 +104,7 @@ Recognizing storage and memory as primary concerns for energy efficiency, reliab
 
 \section{Summary}
 \label{sec:Intro:Summary}
-This thesis investigates new techniques for accelerating data access for new NVRAM storage technologies, and is organized as follows:
+This dissertation investigates new techniques for accelerating data access for new NVRAM storage technologies, and is organized as follows:
 Chapter~\ref{chap:Background} contains background information on storage technologies, database optimizations, and memory consistency.
 This background forms the foundation of the work that follows.
 Chapter~\ref{chap:FlashOpti} considers taking advantage of Flash's fast random reads to accelerate database analytics.
