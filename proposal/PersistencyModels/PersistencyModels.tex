@@ -290,6 +290,16 @@ This problem remains when the access cycle occurs at cache line granularity (fal
 An important aspect of memory persistency is to precisely define allowable behavior under such scenarios.
 I investigate the more-general design space of memory persistency and its interactions with memory consistency.
 
+\textbf{Alternatives to persistent storage.}
+Recent work (e.g., H-Store \cite{StonebrakerMadden07}) suggests highly available systems as an outright replacement for durability.
+Additionally, battery-backed memory and storage obviate the need for memory persistency, allowing more expensive persist synchronization only when necessary (e.g., Whole-System Persistence \cite{NarayananHodson12}).
+I argue that computers and storage systems will always fail, and durability remains a requirement for many applications.
+
+More importantly, highly available systems and battery-backed storage are not universally available.
+Mobile devices, for example, must rely on persistent storage for data recovery.
+Devices in the "Internet of Things" will require high performance while recovering after failure.
+Any device expected to fail frequently (due to low power operation or unreliable power sources) can use memory persistency alongside NVRAM to improve performance while retaining data integrity.
+
 \section{Conclusion}
 \label{sec:PersistencyModels:Conclusion}
 
