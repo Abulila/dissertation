@@ -88,13 +88,13 @@ The persistency model will determine how invasive these software transformations
 
 Finally, persistent memory systems must continue to support advanced thread synchronization mechanisms.
 One area that has not yet been investigated is synchronization to persistent memory, including locks, atomic read-modify-write (e.g., add, exchange, test-and-set), and compare-and-swap.
-While this work does not attempt to use these primitives, I intend to introduce persistency models that properly define the behavior of these operations with NVRAM.
+While this work does not attempt to use these primitives, I intend to introduce persistency models that properly define their with NVRAM.
 Extending existing consistency models provides a framework to define persistent behavior for atomic synchronization primitives.
 
 \section{Memory Persistency}
 \label{sec:Persistency:Persistency}
 
-Recovery mechanisms define specific orders on many persists.
+Recovery mechanisms require specific orders of persists.
 Failure to enforce this order results in data corruption.
 A persistency model enables software to label those persist-order constraints necessary for recovery-correctness while allowing concurrency among other persists.
 As with consistency models, my objective is to strike a balance between programmer annotation burden and the amount of concurrency (and therefore improved performance) the model enables.
@@ -114,7 +114,7 @@ I divide persistency models into \emph{strict} and \emph{relaxed} classes, and c
 \subsection{Strict Persistency}
 
 The most intuitive memory persistency model is \emph{strict persistency.}
-Strict persistency couples memory persistency to the memory consistency model using the existing consistency model to specify persist ordering.
+Strict persistency couples memory persistency to the memory consistency model, using the existing consistency model to specify persist ordering.
 Minimal programmer annotations are required---while processor memory barriers are unnecessary, compiler barriers prevent optimizations that interfere with proper recovery.
 Under strict persistency, the recovery observer participates in the memory consistency model precisely as if it were an additional processor.  
 Hence, any store ordering that can be inferred by observing memory order implies a persist ordering constraint.
@@ -150,7 +150,7 @@ Relaxing persistency requires separate memory consistency and persistency barrie
 Memory consistency barriers enforce the visibility of memory operation ordering with respect to other processors, while memory persistency barriers constrain the visible order of persists from the perspective of only the recovery observer.
 
 Relaxing persistency allows systems with conservative consistency, such as SC, to improve persist concurrency without requiring additional threads or complicating thread communication.
-In the remaining chapters I introduce and explore several relaxed persistency models under SC.
+In later chapters I introduce and explore several relaxed persistency models under SC.
 
 Simultaneously relaxing persistency and consistency allows both the visibility of loads and stores to reorder among processors, and further allows the order of persists to differ from the order of stores.
 An interesting property of such systems is that memory consistency and persistency barriers are decoupled---store visibility and persist order are enforced separately---implying that persists may reorder across store barriers and store visibility may reorder across persist barriers.
