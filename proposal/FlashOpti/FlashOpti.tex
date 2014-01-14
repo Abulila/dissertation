@@ -25,7 +25,7 @@ Furthermore, as SSDs change the relative costs of computation, sequential, and r
 My original intent was to leverage this idea to 1) improve query optimization by making device-specific decisions, and 2) accelerate database analytics and reduce operating costs by intelligently placing data on different devices.
 While Flash is faster than disk, it is generally more expensive per equal capacity.
 It makes sense to place small amounts of frequently accessed data on Flash, and the rest on disk.
-Furthermore some data ``prefers" to live on Flash as it is naturally accessed in ways that Flash holds a competitive advantage over disk (e.g., queries typically access this data in selectivities or join types that prefer Flash).
+Furthermore some data ``prefers" to live on Flash as it is naturally accessed in ways that Flash holds a comparative advantage over disk (e.g., queries typically access this data in selectivities or join types that prefer Flash).
 
 Despite this intuition, my empirical investigation using a commercial DBMS finds \emph{it is not necessary to make any adjustments to the query optimizer when moving data from disk to Flash}---an SSD-oblivious optimizer generally makes effective choices.
 I demonstrate this result, and explore why it is the case, in two steps.
