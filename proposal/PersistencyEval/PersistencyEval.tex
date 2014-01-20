@@ -58,7 +58,8 @@ I observe that the distribution of insert distance is the same when running each
 %Using the memory trace we measure persist ordering constraint critical path as the time of the last persist from any thread.
 Persist times are tracked per address (both persistent and volatile) as well as per thread according to the persistency model.
 For example, under strict persistency each persist occurs after or coalesces with the most recent persists observed through (1) each load operand, (2) the last store to the address being overwritten, and (3) any persists observed by previous instructions on the same thread.
-Persists' ability to coalesce is similarly propagated through memory and thread state to determine when coalescing will violate persist ordering constraints.
+Persists' ability to coalesce is similarly propagated through memory and thread state to determine when coalescing will violate persist ordering constraints---a persist may coalesce if its most recent persist dependence (greatest timestamp) occurs to the same atomically persistable memory block and all other persist dependences are strictly older (timestamp strictly less).
+Under such situations coalescing will not violate any of the earlier persist dependences.
 The persistency models differ as to the events that propagate persist ordering constraints through memory and threads.
 
 Next, I use this methodology to establish the need for relaxed persistency models, as well as measure their opportunity to accelerate recoverable systems.

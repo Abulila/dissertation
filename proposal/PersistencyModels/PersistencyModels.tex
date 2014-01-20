@@ -142,9 +142,10 @@ Memory operation visibility follows SC.
 Additional complexity arises in reasoning about persist ordering across threads. 
 I define a \emph{persist epoch race} as persist epochs from two or more threads that (1) include memory accesses (to volatile or persistent memory) that race, including synchronization races, and (2) at least two of the epochs include persist operations. 
 In the presence of persist epoch races, each persist barrier acts as a persist release for all persists prior to the barrier, and as a persist acquire for all accesses following the barrier \cite{GharachorlooLenoski90}.
-As a consequence, persists prior to the persist barrier immediately preceding the first access of the race are ordered before all persists after the next barrier following the second access of the race.
-However, persists within the epochs participating in the persist epoch race are concurrent and may complete in parallel or out of order.
-Persists from racing epochs are additionally ordered according to the order observed by cache coherence.
+%As a consequence, persists prior to the persist barrier immediately preceding the first access of the race are ordered before all persists after the next barrier following the second access of the race.
+%However, persists within the epochs participating in the persist epoch race are concurrent and may complete in parallel or out of order.
+As a consequence, persists from epochs that race have no defined order (they are concurrent), but persists from prior and subsequent epochs are ordered.
+Additionally, persists to the same address occur in the order observed by cache coherence, allowing ordered persists even when persist epochs race.
 
 \textbf{Discussion.}
 Epoch persistency provides an intuitive mechanism to guarantee proper recovery as it is impossible at recovery to observe a persist from after a barrier while failing to observe a persist from before the same barrier.
