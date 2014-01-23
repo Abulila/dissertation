@@ -277,12 +277,16 @@ For example, ordered indexes are typically implemented as B+Trees with disk, but
 With NVRAM and memory persistency one might imagine a recoverable lock-free tree or skip list with bounded recovery time.
 How to design such data structures remains uncertain, as does their true performance potential.
 
-\textbf{Hardware implementations of persistency models.}
+\textbf{New models and hardware implementations.}
 Once software has been designed we will require hardware implementations of persistency models and NVRAM memory systems.
 Existing memory consistency encompasses a broad literature of models and implementations, detailing specific relaxations to improve performance.
 High performance techniques involving speculation further improve performance for strict consistency models.
 The same will be true for persistency models, yet I expect persistency models must be further relaxed compared to consistency models (an NVRAM persist may take an order of magnitude longer than making a store visible to other processors).
 Akin to speculation, logging and indirection (such as copy-on-write) may improve performance of strict persistency models.
+
+Designing high performance and highly concurrent data structures, even without regard for persistency, remains a challenge.
+To simplify matters researchers have introduced ``programmer-centric" memory consistency models---models that provide the appearance of SC when certain criteria are met (e.g., data-race-free-zero \cite{Adve96}).
+Memory persistency may be similarly simplified by identifying programming patterns and the minimal synchronization constructs to present the appearance of SC while still giving the compiler and processor as much freedom as possible to reorder persists.
 
 \textbf{Implementing efficient persist coalescing.}
 Finally, the previous chapters assume that coalescing will be an important feature of NVRAM systems; indeed, recent work has already demonstrated that without hardware coalescing the software must cache and coalesce persists, introducing additional instructions and increasing the likelihood of design errors \cite{ConditNightingale09,FangHsiao11}.
