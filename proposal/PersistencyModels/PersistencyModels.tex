@@ -237,6 +237,8 @@ A strand is an interval of memory execution from a single thread.
 Strands are separated via \emph{strand barriers}; each strand barrier begins a new strand.
 The strand barrier clears all previously observed persist dependences from the executing thread.
 Within each strand new and observed persists are ordered using persist barriers according to the epoch persistency model.
+Rule (1) of epoch persistency may be modified to read: any two memory accesses on the same \emph{strand} separated by a persist barrier assume the order observed from volatile memory order (accesses from different strands never assume a program order constraint, and will only be ordered through conflicts or ordering constraints with accesses in the same strand).
+Rules (2) and (3) of epoch persistency apply without modification.
 
 \textbf{Discussion.}
 There are no implicit persist ordering constraints across strands for persists to different addresses on the same thread of execution.
