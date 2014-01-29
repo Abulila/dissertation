@@ -148,6 +148,7 @@ As a consequence, persists from epochs that race have no defined order (they are
 Additionally, persists to the same address occur in the order observed by cache coherence, allowing ordered persists even when persist epochs race.
 
 \textbf{Discussion.}
+\input{PersistencyModels/Fig.propagation}
 Epoch persistency provides an intuitive mechanism to guarantee proper recovery as it is impossible at recovery to observe a persist from after a barrier while failing to observe a persist from before the same barrier.
 However, many persists (those within the same epoch) are free to occur in parallel, improving persist concurrency.
 
