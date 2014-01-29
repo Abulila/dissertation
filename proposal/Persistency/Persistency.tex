@@ -176,6 +176,18 @@ The cycle can be resolved by either coupling persist and store barriers---every 
 It remains unclear how to best solve this dilemma.
 Hence, for the remainder of this study, I focus on developing persistency models for SC.
 
+\textbf{Consistency and persistency interaction.}
+The consistency model and persistency model define separate memory orders (volatile memory order and persistent memory order) each containing the same memory events but distinct ordering constraints.
+The ordering constraint sets may be identical, as in strict persistency.
+Typical uses of relaxed persistency result in persistent memory order's constraint set being a subset of volatile memory order's constraint set.
+However, it is possible for persisent memory order to introduce ordering constraints not found in volatile memory order (e.g., a persist barrier that does not enforce store visibility order).
+Taken to an extreme, neither set of ordering constraints is a subset of the other.
+
+Additionally, persistent memory execution affects volatile memory execution.
+For example, once a cache line is evicted, the next load will retrieve the value stored by the most recent \emph{persist,} defined by persistent memory order, not volatile memory order.
+Therefore, any ordering constraints between stores/persists to the same address in volatile memory order must also be present in persistent memory order.
+If this cannot be enforced (e.g., additional constraints on persistent memory order introduce a cycle) the consistency and persistency models must be modified or behavior declared undefined (and thus the model specifies that it is up to the programmer to avoid such situations and how to do so).
+
 \section{Conclusion}
 \label{sec:Persistency:Conclusion}
 
