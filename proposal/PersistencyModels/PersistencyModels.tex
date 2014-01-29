@@ -134,21 +134,24 @@ Doing so, however, requires annotation by the programmer in the form of persist 
 Epoch persistency additionally allows persists to addresses protected by a lock to reorder with respect to the lock operations (e.g., avoid delaying the lock release while the persist completes); my queue implementations leverage this optimization opportunity.
 
 \textbf{Definition.}
-Each thread's execution is separated into \emph{persist epochs} by persist barrier instructions.
+Epoch persistency defines a new \emph{persistent memory order} in addition to execution's existing memory order (referred to as the \emph{volatile memory order}).
+Persistent memory order contains a subset of constraints from the volatile memory order.
+Any pair of persists ordered in the persistent memory order may not be observed out of that order with respect to the recovery observer.
+
+Volatile memory order satisfies SC.
+Each thread's execution is additionally separated into \emph{persist epochs} by persist barrier instructions.
+Epoch persistency provides several rules to inherit memory order constraints from the volatile memory order: (1) any two memory accesses on the same thread separated by a persist barrier assume the order observed from volatile memory order (program order), (2) any two memory accesses (from the same or different threads) that conflict (they are to the same or overlapping addresses and at least one is a store/persist) assume the order observed from volatile memory order (typically enforced via cache coherence), and (3) eight-byte persists are atomic with respect to the recovery observer and failure.
+This last rule is somewhat relaxed in my evaluation, requiring only that eight-byte and \emph{aligned} persists be atomic.
+
 Persist barriers enforce that no persist after the barrier may occur before any persist before the barrier.
 Persists within each epoch (not separated by a barrier) are concurrent and may reorder or occur in parallel.
-Memory operation visibility follows SC.
-
 Additional complexity arises in reasoning about persist ordering across threads. 
-I define a \emph{persist epoch race} as persist epochs from two or more threads that (1) include memory accesses (to volatile or persistent memory) that race, including synchronization races, and (2) at least two of the epochs include persist operations. 
-In the presence of persist epoch races, each persist barrier acts as a persist release for all persists prior to the barrier, and as a persist acquire for all accesses following the barrier \cite{GharachorlooLenoski90}.
-%As a consequence, persists prior to the persist barrier immediately preceding the first access of the race are ordered before all persists after the next barrier following the second access of the race.
-%However, persists within the epochs participating in the persist epoch race are concurrent and may complete in parallel or out of order.
-As a consequence, persists from epochs that race have no defined order (they are concurrent), but persists from prior and subsequent epochs are ordered.
-Additionally, persists to the same address occur in the order observed by cache coherence, allowing ordered persists even when persist epochs race.
+I define a \emph{persist epoch race} as persist epochs from two or more threads that include memory accesses (to volatile or persistent memory) that race, including synchronization races, and at least two of the epochs include persist operations. 
+In the presence of a persist epoch race, rules (1) and (2) order accesses prior to the epoch of the earlier access in the race before accesses following the epoch of the later access in the race.
+Additionally, conflicting accesses are themselves ordered according to the volatile memory order.
+Consequently, two persists to the same address are always ordered even if they occur in racing epochs.
 
 \textbf{Discussion.}
-\input{PersistencyModels/Fig.propagation}
 Epoch persistency provides an intuitive mechanism to guarantee proper recovery as it is impossible at recovery to observe a persist from after a barrier while failing to observe a persist from before the same barrier.
 However, many persists (those within the same epoch) are free to occur in parallel, improving persist concurrency.
 
@@ -164,13 +167,39 @@ However, synchronization through persistent memory is possible.
 Since persists to the same address must follow the order observed by cache coherence, even if they occur in epochs that race, the outcome of persist synchronization is well defined.
 Hence, atomic read-modify-write operations to persistent memory addresses provide the expected behavior.
 
+\textbf{Persist ordering example.}
+\input{PersistencyModels/Fig.propagation}
+Figure~\ref{fig::EpochPersistencyPropagation} demonstrates a sample memory execution and the resulting persistent memory order.
+Capital letters denote memory accesses (loads, stores, and persists), accesses labeled by the same letter are to the same address.
+`` $\vert$ " implies a persist barrier.
+Arrows show access conflicts and the order that the conflict is observed in volatile memory order.
+
+According to rule (1) of epoch persistency all accesses on the same thread are ordered if separated by a persist barrier (A before B and C; C' and D before E; and E' before F).
+By rule (2) all conflicts are ordered according to volatile memory order (C before C'; E before E').
+Transitivity of these rules additionally orders accesses (A before C', E, E', and F; C before E, E', and F; C' and D before E' and F; and E before F).
+Notably, B is unordered with all shown accesses by threads 2 and 3, and D is unordered with accesses by thread 1 (such accesses are concurrent).
+Any accesses that are persists may not be observed out of this order by the recovery observer (e.g., a persist to F may not be observed while a persist to A is not).
+
+This order is enforced on conflicts (between C and C'; E and E') to both volatile and persistent address spaces and as long as one of the accesses is a store or persist.
+This includes the case where the first access is a load and the second a store/persist.
+Providing an implementation to enforce this constraint remains a challenge, as persists must complete before a subsequent load executes or all load-store conflicts must be detected and enforced at some later time.
+
+The resulting persist order resembles RMO \cite{SPARCv9} with (at least) one important difference: memory order constraints introduced due to control and register data dependencies do not impose a persistent memory order constraint in epoch persistency.
+For example, consider that access C is a persist, C' a load, and D a persist whose value depends on C'.
+According to RMO such a register dependence initiated by a load introduces a (volatile) memory order constraint.
+Strict persistency under RMO would now allow persist D to be observed without also observing persist C.
+Epoch persistency, on the other hand, allows such behavior, violating RMO.
+In general persistent memory order need not order accesses that contain a register dependence, but this may produce unintuitive or unintended behavior.
+
+\textbf{BPFS.}
 My definition of epoch persistency is inspired by the programming model and hardware extensions for caching persistent memory proposed for the Byte-addressable Persistent File System (BPFS) \cite{ConditNightingale09}.
 However, I introduce several subtle differences that I believe make epoch persistency a more intuitive model.
 My definition considers all memory accesses when determining persist ordering among threads, whereas the BPFS memory system orders persists only when conflicts occur to the persistent address space.
 While the BPFS file system implementation avoids persist epoch races, it is not clear that the burden falls to the programmer to avoid such accesses or what persist behavior results when such races occur (I believe the BPFS authors' intent was to prohibit programs containing such races---the cache implementation deadlocks under persist epoch races containing circular persist dependences).  
 Furthermore, BPFS detects conflicts to the persistent address space by recording the last thread and epoch to persist to each cache line; the next thread to access that line will detect the conflict.
 Such an implementation, however, cannot detect conflicts where the first access is a load and the second a store.
-As a result, BPFS detects conflicts to persistent memory according to TSO rather than SC ordering \cite{SPARCv9}.
+While occasionally unintuitive, such behavior rarely results in unintended behavior and greatly simplifies the memory system.
+Existing memory consistency models similarly order accesses, including TSO \cite{SPARCv9}).
 
 \textbf{Persist Performance.}
 Epoch persistency removes all unnecessary persist dependences that result from strict persistency's program order constraint.
