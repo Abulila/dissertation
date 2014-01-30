@@ -198,7 +198,7 @@ Synchronization is often provided by software libraries, shielding the average p
 The consistency model provides guarantees on observed memory orders that the programmer can expect and mechanisms to enforce additional constraints.
 Implementations may momentarily violate the consistency model so long as no program is able to observe the violation.
 For example, implementations are free to \emph{speculate}, executing with relaxed consistency, and later determine whether consistency has been violated.
-When consistency is violated the implementation must rollback and re-execute memory instructions, providing the illusion that threads execute with strict consistency.
+When consistency is violated the implementation must roll back and re-execute memory instructions, providing the illusion that threads execute with strict consistency.
 
 \textbf{Sequential Consistency.}
 Sequential Consistency \cite{Lamport79} provides the most intuitive programming model, yet necessarily the worst performance (although modern techniques use speculation to improve performance).
@@ -225,18 +225,18 @@ Relaxed Memory Order \cite{SPARCv9} further relaxes consistency, allowing stores
 To enforce the intended behavior the programmer must use memory barriers to constrain memory operation visibility.
 RMO barriers constrain (1) loads from reordering with other loads, (2) stores from reordering with other stores, (3) loads from bypassing stores, and (4) stores from bypassing loads.
 These constraints are enforced separately and explicitly.
-RMO requires frequent barriers for correct thread communication and is considerably more difficult to program with.
+RMO requires frequent barriers for correct thread communication and is generally considered more difficult to program than SC and TSO.
 
 \textbf{Release Consistency.}
-Release Consistency \cite{GharachorlooLenoski90} provides a relaxed consistency model with two barriers -- acquire and release.
-In the absence of barriers threads may observe memory operations in any order and may read stale data (loading an old value when some other processor has recently written to the same address).
-Before reading shared memory an \emph{acquire} barrier must be used to label the access as an acquire event.
-Similarly, after writing to shared memory a \emph{release} barrier is used to make the updates visible to other processors; acquire and release used as a pair ensure proper synchronization between communicating threads.
-Additionally, acquire and release barriers prevent memory operations from reordering (for example, to ensure that operations in a critical section occur only after the lock is acquired and before the lock is released).
-RMW operations implicitly contain both acquire and release barriers.
+Release Consistency \cite{GharachorlooLenoski90} provides a relaxed consistency model with two instruction instruction---acquire and release.
+In the absence of these labels threads may observe memory operations in any order and may read stale data (loading an old value when some other processor has recently written to the same address).
+Reading shared memory requires an \emph{acquire} label.
+Similarly, after writing to shared memory a \emph{release} label is used to make the updates visible to other processors; acquire and release used as a pair ensure proper synchronization between communicating threads.
+Additionally, acquire and release labels prevent memory operations from reordering (for example, to ensure that operations in a critical section occur only after the lock is acquired and before the lock is released).
+RMW operations implicitly contain both acquire and release labels.
 
-Release Consistency improves performance by (1) allowing maximum instruction reordering for unannotated single threaded code, (2) providing precise memory barriers, introducing the minimal number of ordering constraints to provide the intended behavior, and (3) enforcing cache coherence only at barriers, allowing simpler cache coherence hardware.
-However, release consistency requires the programmer to be aware of and understand these barriers.
+Release Consistency improves performance by (1) allowing maximum instruction reordering for unannotated single threaded code, (2) providing precise synchronization, introducing the minimal number of ordering constraints to provide the intended behavior, and (3) enforcing cache coherence only at acquire and release labels, allowing simpler cache coherence hardware.
+However, release consistency requires the programmer to be aware of and understand acquire and release labels.
 
 A similar trade-off exists for enforcing data persistence---the order in which data becomes persistent may be relaxed and deviate from program order stores.
 Removing NVRAM write constraints improves performance, yet mechanisms must be provided to enforce expected behavior.

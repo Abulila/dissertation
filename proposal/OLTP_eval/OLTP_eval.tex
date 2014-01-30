@@ -38,7 +38,7 @@ The RDTSCP loop delays threads in increments of 13ns (latency per loop iteration
 
 \input{OLTP_eval/Fig.Delay.tex}
 Figure~\ref{fig::Delay} shows the measured delay that results from iterating on an intended delay (both in ns).
-Points show the median of ten thousand delay trials (a small number of trials result in excessively large delays, likely due to context switches, and skew the mean).
+Points show the median of ten thousand delay trials (a small number of trials result in excessively large delays and skew the mean).
 The delay function resembles a step function---delays may only be inserted in multiples of the loop iteration latency.
 
 To better understand delay behavior I perform a least squares regression of a step function against the measured data of the form:
@@ -60,7 +60,8 @@ The new value is atomically swapped into \emph{next\_available} via a Compare-An
 If the CAS fails (due to a race with a persist operation on another thread), the process repeats until it succeeds.
 Upon success, the thread delays until the end of its reservation.
 The main limitation of this approach is that it cannot model reservations shorter than the delay required to perform a CAS to a contended shared variable.
-This technique models reservations above 120ns accurately, which is sufficient for my experiments.
+The delay incurred by a CAS instruction depends on contention to the address and the scheduling of threads across cores and processors.
+I demonstrate that this technique models reservations above 120ns accurately, which is sufficient for my experiments.
 
 Several factors affect the speed of bandwidth reservations (and therefore reservation accuracy) including the number of threads and their placement across sockets and cores.
 I test the reservation system's accuracy by constraining thread placement while threads repeatedly reserve time and delay until the end of the reservation.
@@ -83,7 +84,7 @@ Packing threads into a socket completely fills all cores and SMT contexts of the
 Spreading threads across sockets while packing cores requires 101ns to reserve 99\% of time.
 The required time decreases from six to 12 threads as more threads are available to reserve time and it is less likely that time will go unreserved.
 
-These results suggest that bandwidth reservations will be accurate so long as each reservation exceeds 120ns.
+These results suggest that bandwidth reservations will be accurate, regardless of how threads are scheduled across processors and cores, so long as each reservation exceeds 120ns.
 My additions to Shore-MT reserve bandwidth for each cache line persisted.
 The persist bandwidth analysis study (presented later in Section~\ref{sec:OLTP_eval:Persists:Limitations}) shows that 35ns per cache line (approximately 1.7GB/s persists) represents sufficient bandwidth to negligibly limit performance.
 Since at least four cache lines are always reserved together (in \texttt{persist\_page} and \texttt{persist\_wal}) the bandwidth reservation is accurate.

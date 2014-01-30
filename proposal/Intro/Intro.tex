@@ -33,7 +33,7 @@ Similarly, different ad hoc join algorithms (those that do not use indexes: bloc
 These algorithms and query optimization are further discussed in Section~\ref{sec:Background:Scans}.
 
 My results, originally presented in ADMS 2010 \cite{PelleyWenisch11} and discussed in Chapter~\ref{chap:FlashOpti}, show that while both previous hypotheses are correct, their significance is negligible.
-Optimal access path (index vs table scan) only changes between disk and Flash for a small range of query selectivities, and queries within that range see only a small performance improvement.
+Optimal access path (index vs. table scan) only changes between disk and Flash for a small range of query selectivities, and queries within that range see only a small performance improvement.
 Additionally, join algorithm choice makes little difference, as optimized join algorithms already minimize storage accesses, regardless of access pattern---join algorithms optimized for disk are already optimized for Flash.
 I conclude that the page-oriented nature of Flash limits further analytics-Flash optimization.
 On the other hand, emerging byte-addressable NVRAMs offer finer-grained access.
@@ -98,7 +98,7 @@ The key insight is that data centers typically over-provision infrastructure, re
 PowerRouting leverages compute-specific knowledge of the IT workload to more effectively utilize power infrastructure.
 Both of these works are included without modification.
 
-During my investigations I discovered that, in many regards, industry is superior to academia at decreasing operating costs and improving infrastructure efficiency.
+During my investigations I discovered that, in many regards, industry is ahead of academia at decreasing operating costs and improving infrastructure efficiency.
 As such, the opportunity to contribute meaningful new techniques to improve infrastructure is rapidly diminishing.
 Recognizing storage and memory as primary concerns for energy efficiency, reliability, and cost, I focus on new and emerging storage technologies in this dissertation.
 
@@ -108,8 +108,8 @@ This dissertation investigates new techniques for accelerating data access for n
 Chapter~\ref{chap:Background} contains background information on storage technologies, database optimizations, and memory consistency.
 This background forms the foundation of the work that follows.
 Chapter~\ref{chap:FlashOpti} considers taking advantage of Flash's fast random reads to accelerate database analytics.
-In Chapter~\ref{chap:OLTP_design} I describe potential software designs for OLTP using NVRAM.
+In Chapter~\ref{chap:OLTP_design}, I describe potential software designs for OLTP using NVRAM.
 Chapter~\ref{chap:OLTP_eval} details a methodology to evaluate NVRAM (devices not readily available) on modern hardware and evaluates several aspects of OLTP running on NVRAM.
-Chapter\ref{chap:Persistency} introduces and defines memory persistency.
+Chapter~\ref{chap:Persistency} introduces and defines memory persistency.
 Specific memory persistency models and a persistent queue data structure are proposed in Chapter~\ref{chap:PersistencyModels}.
 Finally, I evaluate these memory persistency models in Chapter~\ref{chap:PersistencyEval}.
