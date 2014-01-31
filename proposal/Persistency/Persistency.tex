@@ -174,7 +174,6 @@ Figure~\ref{fig::Cycle} additionally annotates the persist order constraints (ha
 As shown, these constraints form a cycle and hence cannot be enforced.
 The cycle can be resolved by either coupling persist and store barriers---every persist barrier also prevents store visibility from reordering---or relaxing cache coherence persist order and providing additional mechanisms to order persists across threads.
 It remains unclear how to best solve this dilemma.
-Hence, for the remainder of this study, I focus on developing persistency models for SC.
 
 %\textbf{Consistency and persistency interaction.}
 %The consistency model and persistency model define separate memory orders (volatile memory order and persistent memory order) each containing the same memory events but distinct ordering constraints.
@@ -188,6 +187,24 @@ Hence, for the remainder of this study, I focus on developing persistency models
 %Therefore, any ordering constraints between stores/persists to the same address in volatile memory order must also be present in persistent memory order.
 %If this cannot be enforced (e.g., additional constraints on persistent memory order introduce a cycle) the consistency and persistency models must be modified or behavior declared undefined (and thus the model specifies that it is up to the programmer to avoid such situations and how to do so).
 %
+
+\textbf{Store atomicity.}
+Cache coherence provides \emph{store atomicity} for memory consistency models and their resulting memory orders \cite{Adve96}.
+Store atomicity requires that stores become visible in their entirety (no partial stores) and that stores are atomically visible to all processors, and thus stores to each address are serializable.
+Store atomicity is violated when a store is visible to only a subset of processors (although many memory systems allow store buffering and forwarding within the same processor without violating store atomicity).
+Similar principles apply to memory persistency.
+
+I define a memory persistency model to be \emph{persist-atomic} if persists to the same address are serializable.
+Equivalently, a model is persist-atomic if recovery establishes a single unique value for each address in the persistent address space.
+While persist atomicity requires that persists of a certain size occur atomically, persist atomicity additionally places constraints on the order of persists.
+Persist atomicity is violated when processors recover different values for the same address (e.g., processors recover using persistent per-processors logs---similar behavior in distributed caches violates store atomicity).
+
+Store and persist atomicity are useful features for defining intuitive consistency and persistency models.
+However, it is entirely possible for a memory model to exhibit both store and persist atomicity, but for the order of stores and persists to deviate.
+In such cases persists to the same address are reordered relative to their underlying stores but still retain some total order.
+I additionally define \emph{strong persist atomicity} to describe memory models that provide both store and persist atomicity and where the order of stores to each address agrees with the order of persists.
+All persistency models discussed in the remainder of this study provide strong persist atomicity.
+
 \section{Conclusion}
 \label{sec:Persistency:Conclusion}
 
