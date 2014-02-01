@@ -197,10 +197,11 @@ Similar principles apply to memory persistency.
 I define a memory persistency model to be \emph{persist-atomic} if persists to the same address are serializable.
 Equivalently, a model is persist-atomic if recovery establishes a single unique value for each address in the persistent address space.
 While persist atomicity requires that persists of a certain size occur atomically, persist atomicity additionally places constraints on the order of persists.
-Persist atomicity is violated when processors recover different values for the same address (e.g., processors recover using persistent per-processors logs---similar behavior in distributed caches violates store atomicity).
+Our failure model---the recovery observer---requires that stores to each address occur in a serializable order (stores may only observed in a single order at each processor).
+However, more complex failure models may violate persist atomicity if processors recover different values for the same address (e.g., processors recover using persistent per-processors logs---similar behavior in distributed caches violates store atomicity).
 
 Store and persist atomicity are useful features for defining intuitive consistency and persistency models.
-However, it is entirely possible for a memory model to exhibit both store and persist atomicity, but for the order of stores and persists to deviate.
+However, it is possible for a memory model to exhibit both store and persist atomicity, but for the order of stores and persists to deviate.
 In such cases persists to the same address are reordered relative to their underlying stores but still retain some total order.
 I additionally define \emph{strong persist atomicity} to describe memory models that provide both store and persist atomicity and where the order of stores to each address agrees with the order of persists.
 All persistency models discussed in the remainder of this study provide strong persist atomicity.
