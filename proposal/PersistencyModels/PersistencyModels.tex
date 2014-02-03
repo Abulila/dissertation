@@ -140,8 +140,8 @@ Any pair of persists ordered in the persistent memory order may not be observed 
 
 Volatile memory order satisfies SC.
 Each thread's execution is additionally separated into \emph{persist epochs} by persist barrier instructions.
-Epoch persistency provides several rules to inherit memory order constraints from the volatile memory order: (1) any two memory accesses on the same thread separated by a persist barrier assume the order observed from volatile memory order (program order), (2) any two memory accesses (from the same or different threads) that conflict (they are to the same or overlapping addresses and at least one is a store/persist) assume the order observed from volatile memory order (typically enforced via cache coherence), and (3) eight-byte persists are atomic with respect to the recovery observer and failure.
-This last rule is somewhat relaxed in my evaluation, requiring only that eight-byte and \emph{aligned} persists be atomic.
+Epoch persistency provides several rules to inherit memory order constraints from the volatile memory order: (1) any two memory accesses on the same thread and separated by a persist barrier are ordered, (2) any two memory accesses (from the same or different threads) that conflict (they are to the same or overlapping addresses and at least one is a store/persist) assume the order observed from volatile memory order (enforced via cache coherence), and (3) eight-byte persists are atomic with respect to the recovery observer and failure.
+This last rule is relaxed in my evaluation, requiring only that eight-byte \emph{aligned} persists be atomic.
 
 Persist barriers enforce that no persist after the barrier may occur before any persist before the barrier.
 Persists within each epoch (not separated by a barrier) are concurrent and may reorder or occur in parallel.
